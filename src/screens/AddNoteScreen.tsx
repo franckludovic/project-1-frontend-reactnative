@@ -16,15 +16,18 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import api from '../services/api';
+import { COLORS } from '../constants';
+import { useAuth } from '../context/AuthContext';
 
 // Components
-import Header from '../components/AddNote/Header';
 import TitleInput from '../components/AddNote/TitleInput';
 import ActionButtons from '../components/AddNote/ActionButtons';
 import PhotosSection from '../components/AddNote/PhotosSection';
 import NotesInput from '../components/AddNote/NotesInput';
 import SaveButton from '../components/AddNote/SaveButton';
-import BottomNavigation from '../components/AddNote/BottomNavigation';
+import Header from '../components/Header';
+
+
 
 // Types
 type Place = {
@@ -37,19 +40,8 @@ type Place = {
 
 type Photo = { uri: string };
 
-// Colors
-const COLORS = {
-  primary: '#13daec',
-  primaryDark: '#0ea5b3',
-  backgroundLight: '#f8f9fa',
-  backgroundDark: '#102022',
-  surfaceLight: '#ffffff',
-  surfaceDark: '#1a2c2e',
-  textMain: '#111718',
-  textMuted: '#618689',
-};
-
 const AddNoteScreen: React.FC = () => {
+  const { user, tokens } = useAuth();
   const { place: placeParam } = useLocalSearchParams<{ place: string }>();
 
   const [place, setPlace] = useState<Place | null>(null);
@@ -77,8 +69,12 @@ const AddNoteScreen: React.FC = () => {
       setPlace(parsedPlace);
 
       const safePhotos: Photo[] = [];
-      if (typeof parsedPlace.image_url === 'string') {
-        safePhotos.push({ uri: parsedPlace.image_url });
+      if (parsedPlace.image) {
+        if (typeof parsedPlace.image === 'string') {
+          safePhotos.push({ uri: parsedPlace.image });
+        } else if (parsedPlace.image.uri) {
+          safePhotos.push({ uri: parsedPlace.image.uri });
+        }
       }
       setPhotos(safePhotos);
 
@@ -171,45 +167,68 @@ const AddNoteScreen: React.FC = () => {
 
   // Save function
   const saveNote = async () => {
-    if (!place) return;
+    if (!place || !user || !tokens?.accessToken) return;
 
     try {
       await api.post('/notes', {
-        placeId: place.id,
-        title,
+        user_id: typeof user === 'object' ? (user.user_id || user.id) : user,
+        place_id: parseInt(place.id, 10),
+        title: title,
         content: notes,
-        photos: photos.map(p => p.uri),
-        coords,
-        timestamp,
+        latitude: coords?.latitude || place.latitude,
+        longitude: coords?.longitude || place.longitude,
+        photos: photos.map((photo, index) => ({
+          photo_url: photo.uri,
+          local_path: null, // For now, not handling local paths
+          display_order: index
+        }))
+      }, {
+        headers: {
+          'Authorization': `Bearer ${tokens.accessToken}`
+        }
       });
 
       Alert.alert('Saved', 'Note saved successfully');
       router.back();
-    } catch {
+    } catch (err) {
+      console.error('Save note error:', err);
       Alert.alert('Error', 'Failed to save note');
     }
+
   };
 
   if (loading) {
     return (
       <SafeAreaView style={styles.center}>
-        <ActivityIndicator size="large" color={COLORS.primary} />
+        <ActivityIndicator size="large" color={COLORS.primaryNote} />
       </SafeAreaView>
     );
   }
 
   return (
-    <View style={styles.container}>
-      {/* Background Gradient */}
-      <LinearGradient
-        colors={['rgba(19,218,236,0.1)', 'transparent']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 0, y: 0.3 }}
-        style={styles.backgroundGradient}
+    <SafeAreaView style={styles.container}>
+      {/* Custom Header */}
+      <Header
+        leftContent={
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <Icon name="arrow-back" size={24} color={COLORS.textMain} />
+          </TouchableOpacity>
+        }
+        centerContent={
+          <Text style={styles.headerTitle}>New Note</Text>
+        }
+        rightContent={
+          <TouchableOpacity style={styles.viewAllPill}>
+            <Text style={styles.viewAllText}>View All</Text>
+          </TouchableOpacity>
+        }
+        containerStyle={{
+          marginTop: 20,
+          backgroundColor: COLORS.surfaceLight,
+          borderBottomWidth: 1,
+          borderBottomColor: COLORS.stone200,
+        }}
       />
-
-      {/* Header */}
-      <Header onCancel={() => router.back()} />
 
       {/* Main Content */}
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
@@ -241,35 +260,27 @@ const AddNoteScreen: React.FC = () => {
             onRemovePhoto={(index) => {
               setPhotos(prev => prev.filter((_, i) => i !== index));
             }}
+            coords={coords}
+            timestamp={timestamp}
           />
 
           {/* Notes Input */}
           <NotesInput value={notes} onChangeText={setNotes} />
-       
+
         </View>
       </ScrollView>
 
       {/* Save Button */}
       <SaveButton onPress={saveNote} />
-
-      {/* Bottom Navigation */}
-      <BottomNavigation />
-    </View>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    marginTop: 0,
     backgroundColor: COLORS.backgroundLight,
-  },
-  backgroundGradient: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 256,
-    pointerEvents: 'none',
   },
   center: {
     flex: 1,
@@ -277,9 +288,39 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: COLORS.backgroundLight,
   },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    marginTop: 20,
+    backgroundColor: COLORS.surfaceLight,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.stone200,
+  },
+  backButton: {
+    padding: 8,
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: COLORS.textMain,
+  },
+  viewAllPill: {
+    backgroundColor: COLORS.primaryNote,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+  },
+  viewAllText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#fff',
+  },
   scrollView: {
     flex: 1,
-    marginTop: 80,
+    marginTop: 0,
   },
   content: {
     paddingHorizontal: 24,

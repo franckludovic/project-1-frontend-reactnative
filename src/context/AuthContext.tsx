@@ -1,7 +1,7 @@
 import React, { createContext, useState, useContext } from 'react';
 
 type Tokens = { accessToken?: string; refreshToken?: string } | null;
-type User = { id?: string; email?: string; full_name?: string } | string | null;
+type User = { id?: string; user_id?: number; email?: string; full_name?: string; accessToken?: string; refreshToken?: string; role?: string[] } | string | null;
 
 type AuthContextType = {
   user: User;

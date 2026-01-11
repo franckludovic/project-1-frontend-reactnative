@@ -69,7 +69,7 @@ const PlacesScreen: React.FC = () => {
 
         setSavedPlaces(
           favArray.map((item: any) => ({
-            id: String(item.fav_id),
+            id: String(item.place_id),
             title: item.title,
             subtitle: item.description || "No description",
             image: { uri: item.image_url || "https://picsum.photos/400" },

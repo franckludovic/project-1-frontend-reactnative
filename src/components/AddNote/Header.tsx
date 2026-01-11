@@ -1,53 +1,57 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { COLORS } from '../../constants';
+import Icon from 'react-native-vector-icons/MaterialIcons';
+import {router } from 'expo-router';
 
 interface HeaderProps {
-  onCancel: () => void;
+  onReturn: () => void;
 }
 
-const Header: React.FC<HeaderProps> = ({ onCancel }) => {
+const Header: React.FC<HeaderProps> = ({ onReturn }) => {
   return (
-    <View style={styles.header}>
-      <TouchableOpacity onPress={onCancel}>
-        <Text style={styles.cancelButton}>Cancel</Text>
-      </TouchableOpacity>
-      <Text style={styles.headerTitle}>New Memory</Text>
-      <TouchableOpacity>
-        <Text style={styles.viewAllButton}>View All Notes</Text>
-      </TouchableOpacity>
-    </View>
+      <View style={styles.header}>
+        <TouchableOpacity onPress={onReturn} style={styles.backButton}>
+          <Icon name="arrow-back" size={24} color={COLORS.textMain} />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>New Note</Text>
+        <TouchableOpacity style={styles.viewAllPill}>
+          <Text style={styles.viewAllText}>View All</Text>
+        </TouchableOpacity>
+      </View>
   );
 };
 
 const styles = StyleSheet.create({
   header: {
-    position: 'absolute',
-    top: 50,
-    left: 0,
-    right: 0,
-    zIndex: 10,
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 24,
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
     paddingVertical: 16,
-    backgroundColor: 'rgba(248,249,250,0.8)',
-    backdropFilter: 'blur(12px)',
+    marginTop: 20,
+    backgroundColor: COLORS.surfaceLight,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.stone200,
   },
-  cancelButton: {
-    fontSize: 16,
-    color: '#618689',
-    fontWeight: '500',
+  backButton: {
+    padding: 8,
   },
   headerTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#111718',
+    color: COLORS.textMain,
   },
-  viewAllButton: {
-    fontSize: 14,
-    color: '#13daec',
-    fontWeight: 'bold',
+  viewAllPill: {
+    backgroundColor: COLORS.primaryNote,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+  },
+  viewAllText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#fff',
   },
 });
 

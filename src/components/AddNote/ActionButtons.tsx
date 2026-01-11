@@ -22,10 +22,7 @@ const ActionButtons: React.FC<ActionButtonsProps> = ({
         </Text>
       </TouchableOpacity>
 
-      <TouchableOpacity style={styles.actionButton}>
-        <Icon name="today" size={20} color="#13daec" />
-        <Text style={styles.actionButtonText}>Today</Text>
-      </TouchableOpacity>
+
     </View>
   );
 };
