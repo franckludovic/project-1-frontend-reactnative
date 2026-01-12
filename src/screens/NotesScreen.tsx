@@ -1,51 +1,110 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, ScrollView, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, StyleSheet, SafeAreaView, ScrollView, ActivityIndicator } from 'react-native';
+import * as Location from 'expo-location';
+import { router } from 'expo-router';
 import { COLORS } from '../constants';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
-import TravelNoteCard from '../components/TravelNoteCard';
 import Header from '../components/Header';
+import SearchBar from '../components/SearchBar';
+import FilterChips from '../components/notepage/FilterChips';
+import NotesList from '../components/notepage/NotesList';
+
+type Tag = {
+  label: string;
+  color: string;
+};
 
 type Note = {
-  note_id: number;
+  id: number;
+  title: string;
   content: string;
-  created_at: string;
-  latitude: number;
-  longitude: number;
-  photos: Array<{
-    photo_id: number;
-    photo_url: string;
-    local_path: string | null;
-    display_order: number;
-  }>;
-  place?: {
-    title: string;
-    location: string;
-  };
+  location: string;
+  date: string;
+  imageUrl?: string;
+  tags: Tag[];
+  attachmentsCount: number;
+  synched: boolean;
 };
+
+type FilterType = 'all' | 'synched' | 'unsynched';
 
 const NotesScreen: React.FC = () => {
   const { user, tokens } = useAuth();
   const [notes, setNotes] = useState<Note[]>([]);
+  const [filteredNotes, setFilteredNotes] = useState<Note[]>([]);
   const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedFilter, setSelectedFilter] = useState<FilterType>('all');
 
   useEffect(() => {
     fetchNotes();
   }, []);
 
+  useEffect(() => {
+    filterNotes();
+  }, [notes, searchQuery, selectedFilter]);
+
+  const getLocationName = async (latitude: number, longitude: number): Promise<string> => {
+    try {
+      const geocode = await Location.reverseGeocodeAsync({
+        latitude,
+        longitude,
+      });
+      if (geocode.length > 0) {
+        const address = geocode[0];
+        const locationString = [
+          address.city,
+          address.country,
+        ]
+          .filter(Boolean)
+          .join(', ');
+        return locationString || 'Unknown location';
+      } else {
+        return 'Unknown location';
+      }
+    } catch (error) {
+      console.error('Error reverse geocoding:', error);
+      return 'Unknown location';
+    }
+  };
+
   const fetchNotes = async () => {
-    if (!tokens?.accessToken) return;
+    if (!tokens?.accessToken) {
+      setLoading(false);
+      return;
+    }
     try {
       const response = await api.get('/notes', {
         headers: {
           'Authorization': `Bearer ${tokens.accessToken}`
         }
       });
-      if (response.data.success) {
-        setNotes(response.data.data);
+      let notesData = [];
+      if (response.data.success && response.data.data) {
+        notesData = response.data.data;
+      } else if (Array.isArray(response.data)) {
+        notesData = response.data;
       }
+
+      // Transform backend data to component format
+      const transformedNotes: Note[] = await Promise.all(notesData.map(async (note: any) => {
+        const locationName = await getLocationName(note.latitude, note.longitude);
+        return {
+          id: note.note_id,
+          title: note.place?.title || 'Unknown Place',
+          content: note.content,
+          location: locationName,
+          date: new Date(note.created_at).toLocaleDateString(),
+          imageUrl: note.photos.length > 0 ? note.photos[0].photo_url : undefined,
+          tags: generateTags(note), // Implement based on data
+          attachmentsCount: note.photos.length,
+          synched: note.synched === 1,
+        };
+      }));
+      setNotes(transformedNotes);
     } catch (error) {
-      Alert.alert('Error', 'Failed to load notes');
+      console.error('Failed to load notes', error);
     } finally {
       setLoading(false);
     }
@@ -60,14 +119,55 @@ const NotesScreen: React.FC = () => {
     });
   };
 
+  const generateTags = (note: any): Tag[] => {
+    const tags: Tag[] = [];
+    if (note.place?.title) {
+      tags.push({ label: `#${note.place.title}`, color: '#FFA500' }); // Orange
+    }
+    // Add more tags based on data
+    return tags;
+  };
+
+  const filterNotes = () => {
+    let filtered = notes;
+
+    // Apply search
+    if (searchQuery) {
+      filtered = filtered.filter(note =>
+        note.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        note.content.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        note.location.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+    }
+
+    // Apply filter
+    switch (selectedFilter) {
+      case 'synched':
+        filtered = filtered.filter(note => note.synched);
+        break;
+      case 'unsynched':
+        filtered = filtered.filter(note => !note.synched);
+        break;
+      default:
+        break;
+    }
+
+    setFilteredNotes(filtered);
+  };
+
+  const handleNotePress = (note: Note) => {
+    router.push({
+      pathname: "/note/[noteId]",
+      params: { noteId: note.id.toString() },
+    });
+  };
+
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
-        <Header
-          centerContent={<Text style={styles.headerTitle}>My Notes</Text>}
-        />
+        <Header centerContent={<Text style={styles.headerTitle}>My Notes</Text>} />
         <View style={styles.center}>
-          <ActivityIndicator size="large" color={COLORS.primary} />
+          <ActivityIndicator size="large" color={COLORS.orange} />
         </View>
       </SafeAreaView>
     );
@@ -75,48 +175,29 @@ const NotesScreen: React.FC = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <Header
-        centerContent={<Text style={styles.headerTitle}>My Notes</Text>}
-      />
-
+      <Header centerContent={<Text style={styles.headerTitle}>Your Travel Notes</Text>} />
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-        <View style={styles.content}>
-          {notes.length === 0 ? (
-            <View style={styles.emptyState}>
-              <Text style={styles.icon}>📝</Text>
-              <Text style={styles.title}>No Notes Yet</Text>
-              <Text style={styles.description}>
-                Start exploring places and create your first travel note!
-              </Text>
-            </View>
-          ) : (
-            <View style={styles.notesGrid}>
-              {notes.map((note) => (
-                <TravelNoteCard
-                  key={note.note_id}
-                  title={note.place?.title || 'Unknown Place'}
-                  date={formatDate(note.created_at)}
-                  imageUrl={note.photos.length > 0 ? note.photos[0].photo_url : undefined}
-                  onPress={() => {
-                    // TODO: Navigate to note details
-                    Alert.alert('Note', note.content);
-                  }}
-                />
-              ))}
-            </View>
-          )}
-        </View>
+        <SearchBar
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+        />
+        <FilterChips
+          selectedFilter={selectedFilter}
+          onFilterChange={setSelectedFilter}
+        />
+        <NotesList
+          notes={filteredNotes}
+          onNotePress={handleNotePress}
+        />
       </ScrollView>
     </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.backgroundLight },
-  center: {
+  container: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: COLORS.backgroundLight,
   },
   headerTitle: {
     fontSize: 18,
@@ -126,21 +207,10 @@ const styles = StyleSheet.create({
   scrollView: {
     flex: 1,
   },
-  content: {
-    padding: 20,
-  },
-  emptyState: {
+  center: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  icon: { fontSize: 64, marginBottom: 16 },
-  title: { fontSize: 24, fontWeight: '700', color: COLORS.textMain, marginBottom: 8 },
-  description: { fontSize: 16, color: COLORS.textMuted, textAlign: 'center', marginBottom: 20 },
-  notesGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
   },
 });
 

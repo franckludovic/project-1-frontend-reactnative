@@ -48,7 +48,7 @@ const PhotosSection: React.FC<PhotosSectionProps> = ({ photos, onAddPhoto, onRem
         ))}
       </ScrollView>
 
-      {coords && timestamp && (
+      {coords && typeof coords.latitude === 'number' && typeof coords.longitude === 'number' && timestamp && (
         <View style={styles.pillContainer}>
           <TouchableOpacity style={styles.pillButton}>
             <Text style={styles.pillText}>

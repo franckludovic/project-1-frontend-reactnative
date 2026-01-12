@@ -113,7 +113,7 @@ const AuthenticatedHomeScreen: React.FC<Props> = ({ userName = 'Traveler', avata
         <WelcomeHeader userName={userName} avatar={localAvatar} avatarUrl={avatarUrl} />
 
         {/* Sync Status */}
-        <SyncStatus icon="✓" label="ALL MEMORIES SYNCED" />
+        <SyncStatus icon="✓" label="ALL MEMORIES synched" />
 
         {/* Recent Travel Notes Section */}
         <View style={styles.section}>

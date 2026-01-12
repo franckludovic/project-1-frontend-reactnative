@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -54,6 +54,12 @@ type HeroSectionProps = {
 };
 
 const HeroSection: React.FC<HeroSectionProps> = ({ place }) => {
+  const [isFavorite, setIsFavorite] = useState(false);
+
+  const toggleFavorite = () => {
+    setIsFavorite(!isFavorite);
+  };
+
   return (
     <View style={styles.heroContainer}>
       <ImageBackground
@@ -75,9 +81,14 @@ const HeroSection: React.FC<HeroSectionProps> = ({ place }) => {
             <TouchableOpacity style={styles.glassButton} onPress={() => router.back()}>
               <Icon name="arrow-back" size={24} color="#fff" />
             </TouchableOpacity>
-            <TouchableOpacity style={styles.glassButton}>
-              <Icon name="ios-share" size={20} color="#fff" />
-            </TouchableOpacity>
+            <View style={styles.rightIcons}>
+              <TouchableOpacity style={styles.glassButton}>
+                <Icon name="ios-share" size={20} color="#fff" />
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.glassButton} onPress={toggleFavorite}>
+                <Icon name={isFavorite ? "favorite" : "favorite-border"} size={20} color={isFavorite ? "#ff6b6b" : "#fff"} />
+              </TouchableOpacity>
+            </View>
           </View>
         </SafeAreaView>
 
@@ -122,6 +133,10 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 20,
     marginTop: Platform.OS === 'android' ? 20 : 0,
+  },
+  rightIcons: {
+    flexDirection: 'column',
+    gap: 8,
   },
   glassButton: {
     width: 40,

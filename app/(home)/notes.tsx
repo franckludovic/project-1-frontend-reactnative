@@ -1,5 +1,6 @@
+import React from 'react';
 import NotesScreen from '../../src/screens/NotesScreen';
 
-export default function NotesTabScreen() {
-  return <NotesScreen userName="Traveler" />;
+export default function NoteTabScreen() {
+  return <NotesScreen />;
 }

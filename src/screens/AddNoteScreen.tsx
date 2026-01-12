@@ -15,9 +15,9 @@ import Icon from 'react-native-vector-icons/MaterialIcons';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
-import api from '../services/api';
 import { COLORS } from '../constants';
 import { useAuth } from '../context/AuthContext';
+import { createNote, CreateNoteData } from '../services/noteApi';
 
 // Components
 import TitleInput from '../components/AddNote/TitleInput';
@@ -170,8 +170,14 @@ const AddNoteScreen: React.FC = () => {
     if (!place || !user || !tokens?.accessToken) return;
 
     try {
-      await api.post('/notes', {
-        user_id: typeof user === 'object' ? (user.user_id || user.id) : user,
+      const userId = typeof user === 'object' ? (user.user_id || user.id) : user;
+      if (!userId) {
+        Alert.alert('Error', 'User ID not found');
+        return;
+      }
+
+      const noteData: CreateNoteData = {
+        user_id: Number(userId),
         place_id: parseInt(place.id, 10),
         title: title,
         content: notes,
@@ -182,11 +188,9 @@ const AddNoteScreen: React.FC = () => {
           local_path: null, // For now, not handling local paths
           display_order: index
         }))
-      }, {
-        headers: {
-          'Authorization': `Bearer ${tokens.accessToken}`
-        }
-      });
+      };
+
+      await createNote(noteData, tokens.accessToken);
 
       Alert.alert('Saved', 'Note saved successfully');
       router.back();

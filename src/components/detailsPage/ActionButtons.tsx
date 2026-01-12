@@ -45,9 +45,10 @@ type Place = {
 type ActionButtonsProps = {
   place: Place;
   onAddNote: () => void;
+  onPlanVisit: () => void;
 };
 
-const ActionButtons: React.FC<ActionButtonsProps> = ({ place, onAddNote }) => {
+const ActionButtons: React.FC<ActionButtonsProps> = ({ place, onAddNote, onPlanVisit }) => {
   return (
     <View style={styles.actionRow}>
       <TouchableOpacity
@@ -58,9 +59,9 @@ const ActionButtons: React.FC<ActionButtonsProps> = ({ place, onAddNote }) => {
         <Text style={styles.actionBtnTextGray}>Add Note</Text>
       </TouchableOpacity>
 
-      <TouchableOpacity style={styles.actionBtnWhite}>
-        <Icon name="favorite-border" size={26} color={COLORS.stone400} />
-        <Text style={styles.actionBtnTextGray}>Save</Text>
+      <TouchableOpacity style={styles.actionBtnWhite} onPress={onPlanVisit}>
+        <Icon name="event" size={26} color={COLORS.stone400} />
+        <Text style={styles.actionBtnTextGray}>Plan a visit</Text>
       </TouchableOpacity>
 
       <TouchableOpacity style={styles.actionBtnDark}>

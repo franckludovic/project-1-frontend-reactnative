@@ -49,7 +49,7 @@ const SheetHeader: React.FC<SheetHeaderProps> = ({ place }) => {
       <View style={styles.dragHandle} />
       <View style={styles.statusBadge}>
         <View style={styles.statusDot} />
-        <Text style={styles.statusText}>{place.synched === 1 ? 'Synced' : 'Not synced'}</Text>
+        <Text style={styles.statusText}>{place.synched === 1 ? 'synched' : 'Not synched'}</Text>
       </View>
     </View>
   );

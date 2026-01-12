@@ -5,7 +5,7 @@ import {
   StyleSheet,
   TouchableOpacity,
 } from 'react-native';
-import Icon from 'react-native-vector-icons/MaterialIcons';
+import { MaterialIcons } from '@expo/vector-icons';
 
 type MetadataChipsProps = {
   location: string;
@@ -17,13 +17,13 @@ const MetadataChips: React.FC<MetadataChipsProps> = ({ location, date }) => {
     <View style={styles.container}>
       {/* Location Chip */}
       <TouchableOpacity style={styles.locationChip}>
-        <Icon name="location_on" size={18} color="#ee9d2b" />
+        <MaterialIcons name="location-on" size={18} color="#ee9d2b" />
         <Text style={styles.locationText}>{location}</Text>
       </TouchableOpacity>
 
       {/* Date Chip */}
       <View style={styles.dateChip}>
-        <Icon name="calendar_today" size={18} color="#64748b" />
+        <MaterialIcons name="calendar-today" size={18} color="#64748b" />
         <Text style={styles.dateText}>{date}</Text>
       </View>
     </View>
@@ -33,15 +33,16 @@ const MetadataChips: React.FC<MetadataChipsProps> = ({ location, date }) => {
 const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
-    gap: 12,
-    paddingHorizontal: 20,
+    gap: 10,
+    justifyContent: 'space-between',
+    paddingHorizontal: 15,
     paddingVertical: 16,
     flexWrap: 'wrap',
   },
   locationChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 2,
     backgroundColor: 'rgba(238, 157, 43, 0.1)', // bg-primary/10
     paddingHorizontal: 12,
     paddingVertical: 8,
@@ -50,13 +51,13 @@ const styles = StyleSheet.create({
   },
   locationText: {
     color: '#ee9d2b', // text-primary
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '700',
   },
   dateChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 2,
     backgroundColor: '#f1f5f9', // bg-slate-100
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.1)', // dark:border-white/10
@@ -67,7 +68,7 @@ const styles = StyleSheet.create({
   },
   dateText: {
     color: '#475569', // text-slate-600
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '500',
   },
 });

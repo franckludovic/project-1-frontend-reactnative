@@ -8,8 +8,10 @@ import {
   Alert,
 } from 'react-native';
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
-import api from '../services/api';
+import { getPlaceById } from '../services/placeApi';
+import { getNotesByPlaceId } from '../services/noteApi';
 import { useAuth } from '../context/AuthContext';
+import { API_URL } from '../config/config';
 
 // Components
 import HeroSection from '../components/detailsPage/HeroSection';
@@ -95,17 +97,43 @@ const styles = StyleSheet.create({
 });
 
 const PlaceDetailsScreen = () => {
-  const { placeId } = useLocalSearchParams() as { placeId: any };
+  const { placeId } = useLocalSearchParams() as { placeId: string };
   const { tokens } = useAuth();
-  const parsedPlace = useMemo(() => {
-    return placeId ? JSON.parse(placeId) : null;
-  }, [placeId]);
+  const [parsedPlace, setParsedPlace] = useState<any>(null);
   const [navigating, setNavigating] = useState(false);
   const [notes, setNotes] = useState<Note[]>([]);
   const [loadingNotes, setLoadingNotes] = useState(true);
+  const [loadingPlace, setLoadingPlace] = useState(true);
+
+  // Fetch place data on mount
+  useEffect(() => {
+    const fetchPlace = async () => {
+      if (!placeId) {
+        setLoadingPlace(false);
+        return;
+      }
+
+      try {
+        const placeData = await getPlaceById(parseInt(placeId), tokens?.accessToken);
+        // Transform the place data to match the expected format for components
+        const transformedPlace = {
+          ...placeData,
+          image: { uri: placeData.image_url ? (placeData.image_url.startsWith('http') ? placeData.image_url : `${API_URL}${placeData.image_url}`) : "https://picsum.photos/400" },
+        };
+        setParsedPlace(transformedPlace);
+      } catch (error) {
+        console.error('Error fetching place:', error);
+        Alert.alert('Error', 'Failed to load place details');
+      } finally {
+        setLoadingPlace(false);
+      }
+    };
+
+    fetchPlace();
+  }, [placeId, tokens?.accessToken]);
 
   useEffect(() => {
-    if (parsedPlace?.id) {
+    if (parsedPlace?.place_id || parsedPlace?.id) {
       fetchNotes();
     }
   }, [parsedPlace]);
@@ -119,51 +147,19 @@ const PlaceDetailsScreen = () => {
 
     setLoadingNotes(true); // start spinner only when we attempt a fetch
 
-    console.log('Fetching notes for place_id:', parsedPlace.id, 'type:', typeof parsedPlace.id);
+    const placeIdToUse = parsedPlace.place_id || parsedPlace.id;
+    console.log('Fetching notes for place_id:', placeIdToUse, 'type:', typeof placeIdToUse);
 
     try {
-      // Add a timeout guard
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Request timed out')), 10000)
-      );
-
-      const response = await Promise.race([
-        api.get(`/notes?place_id=${parsedPlace.id}`, {
-          headers: {
-            Authorization: `Bearer ${tokens.accessToken}`,
-          },
-        }),
-        timeoutPromise,
-      ]);
-
-      console.log('Notes response:', response);
-
-      if (response.success) {
-        setNotes(response.data);
-      } else {
-        Alert.alert('Error', 'Failed to load notes');
-      }
+      const notesData = await getNotesByPlaceId(placeIdToUse, tokens.accessToken);
+      setNotes(notesData);
     } catch (error) {
       console.log('Error loading notes:', error);
-      if (error instanceof Error && error.message === 'Request timed out') {
-        Alert.alert('Timeout', 'Failed to load notes: Request timed out');
-      } else {
-        Alert.alert('Error', 'Failed to load notes');
-      }
+      Alert.alert('Error', 'Failed to load notes');
     } finally {
       setLoadingNotes(false); // always stop spinner
     }
   };
-
-  useEffect(() => {
-    console.log('parsedPlace:', parsedPlace);
-    if (parsedPlace?.id) {
-      fetchNotes();
-    } else {
-      console.warn('No valid place_id found');
-      setLoadingNotes(false);
-    }
-  }, [parsedPlace]);
 
   // Reset navigating state when screen comes back into focus
   useFocusEffect(
@@ -180,6 +176,11 @@ const PlaceDetailsScreen = () => {
         place: JSON.stringify(parsedPlace),
       },
     });
+  };
+
+  const handlePlanVisit = () => {
+    // TODO: Implement plan visit functionality
+    Alert.alert('Plan Visit', 'This feature is coming soon!');
   };
 
   if (!parsedPlace) {
@@ -200,7 +201,7 @@ const PlaceDetailsScreen = () => {
 
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
           {/* --- ACTION BUTTONS --- */}
-          <ActionButtons place={parsedPlace} onAddNote={handleAddNote} />
+          <ActionButtons place={parsedPlace} onAddNote={handleAddNote} onPlanVisit={handlePlanVisit} />
 
           {/* --- ABOUT SECTION --- */}
           <AboutSection place={parsedPlace} />

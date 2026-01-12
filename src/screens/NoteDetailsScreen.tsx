@@ -8,34 +8,28 @@ import {
   StatusBar,
   Alert,
   TouchableOpacity,
+  TextInput,
+  Modal,
 } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
-import Icon from 'react-native-vector-icons/MaterialIcons';
-import api from '../services/api';
+import { MaterialIcons } from '@expo/vector-icons';
+import * as Location from 'expo-location';
+import * as ImagePicker from 'expo-image-picker';
+import { getNoteById, updateNote, deleteNote, uploadImage, Note } from '../services/noteApi';
+import { API_BASE_URL } from '../config/config';
 import { useAuth } from '../context/AuthContext';
 
 // Components
-import Header from '../components/Header';
 import ImageCarousel from '../components/noteDetails/ImageCarousel';
 import TitleSection from '../components/noteDetails/TitleSection';
 import MetadataChips from '../components/noteDetails/MetadataChips';
 import ContentSection from '../components/noteDetails/ContentSection';
+import MenuModal from '../components/noteDetails/MenuModal';
+import DeleteImagesModal from '../components/noteDetails/DeleteImagesModal';
+import EditContentSection from '../components/noteDetails/EditContentSection';
+import EditButton from '../components/noteDetails/EditButton';
+import Header from '../components/Header';
 import Button from '../components/Button';
-
-type Note = {
-  note_id: number;
-  title: string | undefined;
-  content: string;
-  created_at: string;
-  latitude: number;
-  longitude: number;
-  photos?: Array<{
-    photo_id: number;
-    photo_url: string;
-    local_path: string | null;
-    display_order: number;
-  }>;
-};
 
 const NoteDetailsScreen: React.FC = () => {
   const { user, tokens } = useAuth();
@@ -43,6 +37,15 @@ const NoteDetailsScreen: React.FC = () => {
 
   const [note, setNote] = useState<Note | null>(null);
   const [loading, setLoading] = useState(true);
+  const [locationName, setLocationName] = useState<string>('Loading location...');
+  const [isEditing, setIsEditing] = useState(false);
+  const [editedContent, setEditedContent] = useState('');
+  const [showMenu, setShowMenu] = useState(false);
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [isDeletingImages, setIsDeletingImages] = useState(false);
+  const [selectedImages, setSelectedImages] = useState<Set<number>>(new Set());
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [showDeleteImageModal, setShowDeleteImageModal] = useState(false);
 
   useEffect(() => {
     if (!noteId) {
@@ -54,31 +57,50 @@ const NoteDetailsScreen: React.FC = () => {
     fetchNoteDetails();
   }, [noteId]);
 
-  const fetchNoteDetails = async () => {
+  useEffect(() => {
+    if (note) {
+      reverseGeocodeLocation();
+    }
+  }, [note]);
+
+  const reverseGeocodeLocation = async () => {
+    if (!note) return;
+
     try {
-      setLoading(true);
-      console.log('Fetching note details for noteId:', noteId);
-      console.log('Access token present:', !!tokens?.accessToken);
-
-      const response = await api.get(`/notes/${noteId}`, {
-        headers: {
-          Authorization: `Bearer ${tokens?.accessToken}`,
-        },
+      const geocode = await Location.reverseGeocodeAsync({
+        latitude: note.latitude,
+        longitude: note.longitude,
       });
-
-      console.log('API response:', response);
-
-      if (response.success) {
-        console.log('✅ Note data received:', response.data);
-        setNote(response.data);
+      if (geocode.length > 0) {
+        const address = geocode[0];
+        const locationString = [
+          address.city,
+          address.country,
+        ]
+          .filter(Boolean)
+          .join(', ');
+        setLocationName(locationString || 'Unknown location');
       } else {
-        console.log('❌ API returned success: false, message:', response.message);
-        Alert.alert('Error', 'Failed to load note details');
-        router.back();
+        setLocationName('Unknown location');
       }
     } catch (error) {
+      console.error('Error reverse geocoding:', error);
+      setLocationName('Unknown location');
+    }
+  };
+
+  const fetchNoteDetails = async () => {
+    try {
+      const noteData = await getNoteById(parseInt(noteId), tokens?.accessToken || '');
+      if (!noteData) {
+        Alert.alert('Error', 'Note not found');
+        router.back();
+        return;
+      }
+      setNote(noteData);
+      setEditedContent(noteData.content || '');
+    } catch (error) {
       console.error('Error fetching note details:', error);
-      console.error('Error details:', error.response?.data || error.message);
       Alert.alert('Error', 'Failed to load note details');
       router.back();
     } finally {
@@ -86,25 +108,161 @@ const NoteDetailsScreen: React.FC = () => {
     }
   };
 
-  const handleEditNote = () => {
-    // TODO: Navigate to edit note screen
-    Alert.alert('Edit Note', 'Edit functionality coming soon!');
+  const handleUpdateNote = async () => {
+    if (!note) return;
+
+    setIsUpdating(true);
+    try {
+      await updateNote(note.note_id, { content: editedContent }, tokens?.accessToken || '');
+      setNote({ ...note, content: editedContent });
+      setIsEditing(false);
+      Alert.alert('Success', 'Note updated successfully');
+    } catch (error) {
+      console.error('Error updating note:', error);
+      Alert.alert('Error', 'Failed to update note');
+    } finally {
+      setIsUpdating(false);
+    }
   };
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    });
+  const handleAddImage = async () => {
+    try {
+      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (permissionResult.granted === false) {
+        Alert.alert('Permission required', 'Permission to access camera roll is required!');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        setIsUploadingImage(true);
+        const selectedImage = result.assets[0];
+
+        const formData = new FormData();
+        formData.append('image', {
+          uri: selectedImage.uri,
+          type: 'image/jpeg',
+          name: 'photo.jpg',
+        } as any);
+
+        try {
+          // First upload the image
+          const uploadResponse = await uploadImage(formData, tokens?.accessToken || '');
+
+          if (!uploadResponse.success) {
+            throw new Error('Failed to upload image');
+          }
+
+          const imageUrl = uploadResponse.imageUrl;
+
+          // Then update the note with the new image
+          const updatedPhotos = [
+            ...(note?.photos || []),
+            {
+              photo_url: imageUrl,
+              local_path: selectedImage.uri,
+              display_order: (note?.photos?.length || 0) + 1,
+            },
+          ];
+
+          await updateNote(parseInt(noteId), {
+            photos: updatedPhotos,
+          }, tokens?.accessToken || '');
+
+          // Update local state
+          setNote({
+            ...note!,
+            photos: updatedPhotos.map((photo, index) => ({
+              photo_id: Date.now() + index, // Temporary ID
+              ...photo,
+            })),
+          });
+
+          Alert.alert('Success', 'Image added successfully');
+        } catch (uploadError) {
+          console.error('Error uploading image:', uploadError);
+          Alert.alert('Error', 'Failed to upload image');
+        } finally {
+          setIsUploadingImage(false);
+        }
+      }
+    } catch (error) {
+      console.error('Error adding image:', error);
+      Alert.alert('Error', 'Failed to add image');
+    }
+  };
+
+  const handleDeleteImages = async () => {
+    if (selectedImages.size === 0) return;
+
+    setIsDeletingImages(true);
+    try {
+      const updatedPhotos = note?.photos?.filter(
+        (photo) => !selectedImages.has(photo.photo_id)
+      ) || [];
+
+      await updateNote(parseInt(noteId), {
+        photos: updatedPhotos,
+      }, tokens?.accessToken || '');
+
+      setNote({
+        ...note!,
+        photos: updatedPhotos,
+      });
+
+      setSelectedImages(new Set());
+      setShowDeleteImageModal(false);
+      Alert.alert('Success', 'Images deleted successfully');
+    } catch (error) {
+      console.error('Error deleting images:', error);
+      Alert.alert('Error', 'Failed to delete images');
+    } finally {
+      setIsDeletingImages(false);
+    }
+  };
+
+  const handleDeleteNote = () => {
+    Alert.alert(
+      'Delete Note',
+      'Are you sure you want to delete this note? This action cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteNote(parseInt(noteId), tokens?.accessToken || '');
+              Alert.alert('Success', 'Note deleted successfully');
+              router.back();
+            } catch (error) {
+              console.error('Error deleting note:', error);
+              Alert.alert('Error', 'Failed to delete note');
+            }
+          },
+        },
+      ]
+    );
   };
 
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
+        <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
+        <Header
+          leftContent={<TouchableOpacity onPress={() => router.back()}>
+            <MaterialIcons name="arrow-back" size={24} color="#0f172a" />
+          </TouchableOpacity>}
+          centerContent={<Text style={{ fontSize: 18, fontWeight: '600', color: '#0f172a' }}>Note Details</Text>}
+        />
         <View style={styles.loadingContainer}>
-          <Text>Loading note details...</Text>
+          <Text>Loading...</Text>
         </View>
       </SafeAreaView>
     );
@@ -113,6 +271,13 @@ const NoteDetailsScreen: React.FC = () => {
   if (!note) {
     return (
       <SafeAreaView style={styles.container}>
+        <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
+        <Header
+          leftContent={<TouchableOpacity onPress={() => router.back()}>
+            <MaterialIcons name="arrow-back" size={24} color="#0f172a" />
+          </TouchableOpacity>}
+          centerContent={<Text style={{ fontSize: 18, fontWeight: '600', color: '#0f172a' }}>Note Details</Text>}
+        />
         <View style={styles.errorContainer}>
           <Text>Note not found</Text>
         </View>
@@ -122,46 +287,93 @@ const NoteDetailsScreen: React.FC = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#f8f7f6" />
-
-      {/* Header */}
+      <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
       <Header
-        leftContent={
-          <TouchableOpacity onPress={() => router.back()}>
-            <Icon name="arrow_back" size={24} color="#0f172a" />
-          </TouchableOpacity>
-        }
-        rightContent={
-          <TouchableOpacity onPress={() => Alert.alert('More Options', 'Options coming soon!')}>
-            <Icon name="more_vert" size={24} color="#0f172a" />
-          </TouchableOpacity>
-        }
+        leftContent={<TouchableOpacity onPress={() => router.back()}>
+          <MaterialIcons name="arrow-back" size={24} color="#0f172a" />
+        </TouchableOpacity>}
+        centerContent={<Text style={{ fontSize: 18, fontWeight: '600', color: '#0f172a' }}>Note Details</Text>}
+        rightContent={<TouchableOpacity onPress={() => setShowMenu(true)}>
+          <MaterialIcons name="more-vert" size={24} color="#0f172a" />
+        </TouchableOpacity>}
       />
 
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-        {/* Image Carousel */}
+      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
         <ImageCarousel photos={note.photos || []} />
 
-        {/* Title Section */}
         <TitleSection title={note.title || 'Untitled Note'} />
 
-        {/* Metadata Chips */}
         <MetadataChips
-          location="Kyoto, Japan" // TODO: Get from place data
-          date={formatDate(note.created_at)}
+          location={locationName}
+          date={new Date(note.created_at).toLocaleDateString()}
         />
 
-        {/* Content Section */}
-        <ContentSection content={note.content} />
+        {isEditing ? (
+          <EditContentSection
+            value={editedContent}
+            onChangeText={setEditedContent}
+          />
+        ) : (
+          <ContentSection content={note.content} />
+        )}
 
-        {/* Edit Button */}
-        <View style={styles.editButtonContainer}>
-          <TouchableOpacity style={styles.editButton} onPress={handleEditNote}>
-            <Icon name="edit_note" size={20} color="#0f172a" />
-            <Text style={styles.editButtonText}>Edit Note</Text>
-          </TouchableOpacity>
-        </View>
+        {isEditing && (
+          <EditButton
+            onSave={handleUpdateNote}
+            onCancel={() => {
+              setIsEditing(false);
+              setEditedContent(note.content);
+            }}
+            isUpdating={isUpdating}
+          />
+        )}
+
+        {!isEditing && (
+          <View style={styles.actionButtons}>
+            <Button
+              title="Edit Note"
+              onPress={() => setIsEditing(true)}
+              style={styles.editButton}
+            />
+          </View>
+        )}
       </ScrollView>
+
+      {/* Menu Modal */}
+      <MenuModal
+        visible={showMenu}
+        onClose={() => setShowMenu(false)}
+        onAddImage={handleAddImage}
+        onDeleteImages={() => setShowDeleteImageModal(true)}
+        onDeleteNote={handleDeleteNote}
+      />
+
+      {/* Delete Images Modal */}
+      <DeleteImagesModal
+        visible={showDeleteImageModal}
+        photos={note.photos || []}
+        selectedImages={selectedImages}
+        onToggleSelect={(photoId: number) => {
+          const newSelected = new Set(selectedImages);
+          if (newSelected.has(photoId)) {
+            newSelected.delete(photoId);
+          } else {
+            newSelected.add(photoId);
+          }
+          setSelectedImages(newSelected);
+        }}
+        onDelete={handleDeleteImages}
+        onClose={() => setShowDeleteImageModal(false)}
+        isDeleting={isDeletingImages}
+      />
+
+      {isUploadingImage && (
+        <View style={styles.loadingOverlay}>
+          <View style={styles.loadingBox}>
+            <Text style={styles.loadingText}>Uploading image...</Text>
+          </View>
+        </View>
+      )}
     </SafeAreaView>
   );
 };
@@ -169,10 +381,14 @@ const NoteDetailsScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8f7f6',
+    backgroundColor: '#ffffff',
+    marginTop: StatusBar.currentHeight || 0,
   },
   scrollView: {
     flex: 1,
+  },
+  scrollContent: {
+    paddingBottom: 20,
   },
   loadingContainer: {
     flex: 1,
@@ -184,24 +400,32 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  editButtonContainer: {
-    paddingHorizontal: 20,
-    paddingBottom: 24,
-    marginTop: 16,
+  actionButtons: {
+    paddingHorizontal: 15,
+    paddingVertical: 10,
   },
   editButton: {
-    height: 48,
-    backgroundColor: '#f1f5f9', // bg-slate-100
-    borderRadius: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
+    marginBottom: 10,
   },
-  editButtonText: {
+  loadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingBox: {
+    backgroundColor: '#ffffff',
+    padding: 20,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  loadingText: {
     fontSize: 16,
-    fontWeight: '700',
-    color: '#0f172a', // text-slate-900
+    color: '#0f172a',
   },
 });
 

@@ -41,6 +41,12 @@ export default function RootLayout() {
             headerShown: false,
           }}
         />
+        <Stack.Screen
+          name="note"
+          options={{
+            headerShown: false,
+          }}
+        />
       </Stack>
     </AuthProvider>
   );

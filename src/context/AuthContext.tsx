@@ -1,4 +1,5 @@
-import React, { createContext, useState, useContext } from 'react';
+import React, { createContext, useState, useContext, useEffect } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 type Tokens = { accessToken?: string; refreshToken?: string } | null;
 type User = { id?: string; user_id?: number; email?: string; full_name?: string; accessToken?: string; refreshToken?: string; role?: string[] } | string | null;
@@ -6,8 +7,10 @@ type User = { id?: string; user_id?: number; email?: string; full_name?: string;
 type AuthContextType = {
   user: User;
   tokens: Tokens;
-  signIn: (user: User, tokens?: Tokens) => void;
-  signOut: () => void;
+  signIn: (user: User, tokens?: Tokens) => Promise<void>;
+  signOut: () => Promise<void>;
+  refreshToken: () => Promise<boolean>;
+  isLoading: boolean;
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);

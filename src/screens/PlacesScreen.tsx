@@ -6,7 +6,6 @@ import {
   SafeAreaView,
   ImageBackground,
   TouchableOpacity,
-  ScrollView,
   Dimensions,
   Alert,
   Animated,
@@ -20,16 +19,65 @@ import * as Location from "expo-location";
 import { COLORS } from "../constants";
 import { useAuth } from "../context/AuthContext";
 import { get } from "../services/api";
+import { addFavorite, removeFavorite, getFavorites } from "../services/favoriteApi";
+import PlaceCard from "../components/PlaceCard";
+import Grid from "../components/Grid";
 
 const { height } = Dimensions.get("window");
 
 const PlacesScreen: React.FC = () => {
   const { tokens, user } = useAuth();
+ const userID = typeof user === "string" ? null : user?.user_id ?? null;
 
-  const [activeTab, setActiveTab] = useState("Saved");
+
+  const [activeTab, setActiveTab] = useState("Viewed");
   const [savedPlaces, setSavedPlaces] = useState<any[]>([]);
   const [recentlyViewed, setRecentlyViewed] = useState<any[]>([]);
+  const [nearbyPlaces, setNearbyPlaces] = useState<any[]>([]);
+  const [plannedVisits, setPlannedVisits] = useState<any[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  const handleFavoriteToggle = async (placeId: string, isCurrentlyFavorite: boolean) => {
+    if (!tokens?.accessToken || !userID) {
+      Alert.alert('Error', 'You must be logged in to manage favorites.');
+      return;
+    }
+
+    try {
+      if (isCurrentlyFavorite) {
+        // Remove favorite
+        const favArray = await getFavorites(tokens.accessToken);
+        const favorite = favArray.find((f: any) => f.place_id === parseInt(placeId));
+        if (favorite) {
+          await removeFavorite(favorite.fav_id, tokens.accessToken);
+        }
+
+        // Update Saved Places (remove from list)
+        setSavedPlaces(prev => prev.filter(item => item.id !== placeId));
+      } else {
+        // Add favorite
+        await addFavorite({ user_id: userID, place_id: parseInt(placeId) }, tokens.accessToken);
+      }
+
+      // Update Recently Viewed (optimistic toggle)
+      setRecentlyViewed(prev =>
+        prev.map(item =>
+          item.id === placeId ? { ...item, isFavorite: !isCurrentlyFavorite } : item
+        )
+      );
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to update favorite.');
+
+      // Revert optimistic update on error
+      setRecentlyViewed(prev =>
+        prev.map(item =>
+          item.id === placeId ? { ...item, isFavorite: isCurrentlyFavorite } : item
+        )
+      );
+    }
+  };
+
 
   /* Bottom sheet */
   const [bottomSheetTopValue, setBottomSheetTopValue] = useState(height * 0.15);
@@ -59,25 +107,7 @@ const PlacesScreen: React.FC = () => {
     const fetchData = async () => {
       try {
         // Favorites
-        const favRes = await get("favorites", {
-          headers: { Authorization: `Bearer ${tokens.accessToken}` },
-        });
-
-        const favArray = Array.isArray(favRes.data)
-          ? favRes.data
-          : favRes.data?.data ?? [];
-
-        setSavedPlaces(
-          favArray.map((item: any) => ({
-            id: String(item.place_id),
-            title: item.title,
-            subtitle: item.description || "No description",
-            image: { uri: item.image_url || "https://picsum.photos/400" },
-            latitude: item.latitude || 0,
-            longitude: item.longitude || 0,
-            timestamp: item.created_at || new Date().toISOString(),
-          }))
-        );
+        const favArray = await getFavorites(tokens.accessToken);
 
         // My places
         const res = await get("places/me", {
@@ -91,16 +121,18 @@ const PlacesScreen: React.FC = () => {
         const enriched = await Promise.all(
           placesArray.slice(0, 10).map(async (item: any) => ({
             id: String(item.place_id),
+            place_id: item.place_id,
             title: item.title,
             location: await getReadableLocation(item.latitude, item.longitude),
             rating: item.rating ?? 4.5,
-            isFavorite: item.is_favorite ?? false,
+            isFavorite: item.is_favorite === 1,
             image: { uri: item.image_url || "https://picsum.photos/400" },
             latitude: item.latitude,
             longitude: item.longitude,
             timestamp: item.created_at || new Date().toISOString(),
           }))
         );
+
 
         setRecentlyViewed(enriched);
       } catch (err: any) {
@@ -185,7 +217,7 @@ const PlacesScreen: React.FC = () => {
     }
   };
 
-  const tabs = ["Saved", "Nearby", "Bucket List"];
+  const tabs = ["Viewed", "Nearby", "Planned Visit"];
 
   return (
     <SafeAreaView style={styles.container}>
@@ -220,83 +252,55 @@ const PlacesScreen: React.FC = () => {
           ))}
         </View>
 
-        <ScrollView
-          style={styles.contentScroll}
-          showsVerticalScrollIndicator={false}
-        >
-          {/* Recently Viewed */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Recently Viewed</Text>
-
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              {recentlyViewed.map((item) => (
-                <TouchableOpacity
-                  key={item.id}
-                  style={styles.card}
-                  activeOpacity={0.85}
-                  onPress={() =>
-                    router.push({
-                      pathname: "/place/[placeId]",
-                      params: { placeId: JSON.stringify(item) },
-                    })
-                  }
-                >
-                  <ImageBackground source={item.image} style={styles.cardImage}>
-                    {/* Favorite */}
-                    <TouchableOpacity
-                      style={styles.favoriteIcon}
-                      onPress={() => console.log("Favorite:", item.id)}
-                    >
-                      <Icon
-                        name={item.isFavorite ? "heart" : "heart-o"}
-                        size={18}
-                        color={item.isFavorite ? "red" : "#333"}
-                      />
-                    </TouchableOpacity>
-
-                    {/* Rating */}
-                    <View style={styles.ratingBottom}>
-                      <Text style={styles.ratingText}>⭐ {item.rating}</Text>
-                    </View>
-                  </ImageBackground>
-
-                  <View style={styles.cardContent}>
-                    <Text style={styles.cardTitle} numberOfLines={1}>
-                      {item.title}
-                    </Text>
-                    <Text style={styles.locationText} numberOfLines={1}>
-                      {item.location}
-                    </Text>
+        <View style={styles.contentScroll}>
+          {activeTab === "Viewed" && (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Recently Viewed</Text>
+              <Grid
+                data={recentlyViewed}
+                renderItem={({ item }) => (
+                  <View style={styles.gridItem}>
+                    <PlaceCard
+                      title={item.title}
+                      location={item.location}
+                      imageSource={item.image}
+                      onPress={() =>
+                        router.push({
+                          pathname: "/place/[placeId]",
+                          params: { placeId: String(item.place_id) },
+                        })
+                      }
+                      onFavoritePress={() => handleFavoriteToggle(item.id, item.isFavorite)}
+                      isFavorite={item.isFavorite}
+                      placeId={parseInt(item.id)}
+                    />
                   </View>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </View>
+                )}
+                keyExtractor={(item) => item.id}
+                numColumns={2}
+                contentContainerStyle={styles.gridContainer}
+              />
+            </View>
+          )}
 
-          {/* Saved */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>My Saved Places</Text>
-            {savedPlaces.map((item) => (
-              <TouchableOpacity
-                key={item.id}
-                style={styles.listItem}
-                activeOpacity={0.85}
-                onPress={() =>
-                  router.push({
-                    pathname: "/place/[placeId]",
-                    params: { placeId: JSON.stringify(item) },
-                  })
-                }
-              >
-                <ImageBackground source={item.image} style={styles.listImage} />
-                <View style={styles.listContent}>
-                  <Text style={styles.listTitle}>{item.title}</Text>
-                  <Text style={styles.listSubtitle}>{item.subtitle}</Text>
-                </View>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </ScrollView>
+          {activeTab === "Nearby" && (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Nearby Places</Text>
+              <View style={styles.emptyContainer}>
+                <Text style={styles.emptyText}>No nearby places available yet.</Text>
+              </View>
+            </View>
+          )}
+
+          {activeTab === "Planned Visit" && (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Planned Visits</Text>
+              <View style={styles.emptyContainer}>
+                <Text style={styles.emptyText}>No planned visits yet.</Text>
+              </View>
+            </View>
+          )}
+        </View>
       </Animated.View>
 
       {/* Camera */}
@@ -379,7 +383,7 @@ const styles = StyleSheet.create({
   },
   contentScroll: {
     flex: 1,
-    paddingHorizontal: 20,
+    paddingHorizontal: 0,
   },
   section: {
     marginBottom: 24,
@@ -394,6 +398,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "bold",
     color: "#111418",
+    marginLeft: 20,
   },
   seeAll: {
     fontSize: 14,
@@ -542,6 +547,25 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 12,
+  },
+  gridContainer: {
+    padding: 8,
+  },
+  gridItem: {
+    flex: 1,
+    margin: 8,
+    maxWidth: (Dimensions.get('window').width - 56) / 2, // Account for padding and margins
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  emptyText: {
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
   },
 });
 
