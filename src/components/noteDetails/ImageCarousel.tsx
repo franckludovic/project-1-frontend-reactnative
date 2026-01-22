@@ -10,10 +10,10 @@ import {
 const { width } = Dimensions.get('window');
 
 type Photo = {
-  photo_id: number;
-  photo_url: string;
-  local_path: string | null;
-  display_order: number;
+  photo_id?: number;
+  photo_url?: string;
+  local_path?: string | null;
+  display_order?: number;
 };
 
 type ImageCarouselProps = {
@@ -40,9 +40,9 @@ const ImageCarousel: React.FC<ImageCarouselProps> = ({ photos }) => {
       snapToAlignment="center"
     >
       {photos.map((photo, index) => (
-        <View key={photo.photo_id} style={styles.imageContainer}>
+        <View key={photo.photo_id || index} style={styles.imageContainer}>
           <Image
-            source={{ uri: photo.photo_url }}
+            source={{ uri: photo.local_path || photo.photo_url }}
             style={styles.image}
             resizeMode="cover"
           />

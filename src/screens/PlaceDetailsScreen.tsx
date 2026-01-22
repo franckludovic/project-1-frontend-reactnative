@@ -8,10 +8,14 @@ import {
   Alert,
 } from 'react-native';
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
-import { getPlaceById } from '../services/placeApi';
-import { getNotesByPlaceId } from '../services/noteApi';
+import { getPlaceById as getPlaceByIdApi } from '../services/placeApi';
+import { getNotesByPlaceId as getNotesByPlaceIdApi } from '../services/noteApi';
+import { getPlaceById } from '../services/placeService';
+import { getNotesByPlaceId } from '../services/noteService';
+import { getPlacePhotos, type PlacePhoto } from '../services/photoService';
 import { useAuth } from '../context/AuthContext';
-import { API_URL } from '../config/config';
+import { STATIC_BASE_URL } from '../config/config';
+
 
 // Components
 import HeroSection from '../components/detailsPage/HeroSection';
@@ -57,6 +61,8 @@ type Note = {
   }>;
 };
 
+
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -98,49 +104,55 @@ const styles = StyleSheet.create({
 
 const PlaceDetailsScreen = () => {
   const { placeId } = useLocalSearchParams() as { placeId: string };
-  const { tokens } = useAuth();
+  const { tokens, authMode } = useAuth();
   const [parsedPlace, setParsedPlace] = useState<any>(null);
   const [navigating, setNavigating] = useState(false);
   const [notes, setNotes] = useState<Note[]>([]);
   const [loadingNotes, setLoadingNotes] = useState(true);
   const [loadingPlace, setLoadingPlace] = useState(true);
+  const [placePhotos, setPlacePhotos] = useState<PlacePhoto[]>([]);
 
-  // Fetch place data on mount
-  useEffect(() => {
-    const fetchPlace = async () => {
-      if (!placeId) {
-        setLoadingPlace(false);
-        return;
+useEffect(() => {
+  const fetchPlace = async () => {
+    if (!placeId) {
+      setLoadingPlace(false);
+      return;
+    }
+
+    try {
+      let placeData;
+      if (authMode === 'offline') {
+        // Use local service for offline mode
+        placeData = await getPlaceById(parseInt(placeId));
+      } else {
+        // Use API service for online mode
+        placeData = await getPlaceByIdApi(parseInt(placeId), tokens?.accessToken || '');
       }
 
-      try {
-        const placeData = await getPlaceById(parseInt(placeId), tokens?.accessToken);
-        // Transform the place data to match the expected format for components
-        const transformedPlace = {
-          ...placeData,
-          image: { uri: placeData.image_url ? (placeData.image_url.startsWith('http') ? placeData.image_url : `${API_URL}${placeData.image_url}`) : "https://picsum.photos/400" },
-        };
-        setParsedPlace(transformedPlace);
-      } catch (error) {
-        console.error('Error fetching place:', error);
-        Alert.alert('Error', 'Failed to load place details');
-      } finally {
-        setLoadingPlace(false);
-      }
-    };
+      // Place data from local DB doesn't have image_url anymore, images are in place_photos table
+      setParsedPlace(placeData);
+    } catch (error) {
+      console.error("Error fetching place:", error);
+      Alert.alert("Error", "Failed to load place details");
+    } finally {
+      setLoadingPlace(false);
+    }
+  };
 
-    fetchPlace();
-  }, [placeId, tokens?.accessToken]);
+  fetchPlace();
+}, [placeId, tokens?.accessToken, authMode]);
+
 
   useEffect(() => {
     if (parsedPlace?.place_id || parsedPlace?.id) {
       fetchNotes();
+      fetchPlacePhotos();
     }
   }, [parsedPlace]);
 
   const fetchNotes = async () => {
-    // If no token, don't even try — and don't show loading spinner
-    if (!tokens?.accessToken) {
+    // If no token and not offline, don't even try — and don't show loading spinner
+    if (!tokens?.accessToken && authMode !== 'offline') {
       setLoadingNotes(false);
       return;
     }
@@ -151,13 +163,33 @@ const PlaceDetailsScreen = () => {
     console.log('Fetching notes for place_id:', placeIdToUse, 'type:', typeof placeIdToUse);
 
     try {
-      const notesData = await getNotesByPlaceId(placeIdToUse, tokens.accessToken);
-      setNotes(notesData);
+      let notesData;
+      if (authMode === 'offline') {
+        // Use local service for offline mode
+        notesData = await getNotesByPlaceId(placeIdToUse);
+      } else {
+        // Use API service for online mode
+        notesData = await getNotesByPlaceIdApi(placeIdToUse, tokens?.accessToken as string);
+      }
+      setNotes(notesData as Note[]);
     } catch (error) {
       console.log('Error loading notes:', error);
       Alert.alert('Error', 'Failed to load notes');
     } finally {
       setLoadingNotes(false); // always stop spinner
+    }
+  };
+
+  const fetchPlacePhotos = async () => {
+    const placeIdToUse = parsedPlace.place_id || parsedPlace.id;
+    console.log('Fetching photos for place_id:', placeIdToUse);
+
+    try {
+      const photosData = await getPlacePhotos(placeIdToUse);
+      setPlacePhotos(photosData);
+    } catch (error) {
+      console.log('Error loading place photos:', error);
+      // Don't show alert for photos, as it's not critical
     }
   };
 
@@ -192,7 +224,7 @@ const PlaceDetailsScreen = () => {
       <StatusBar barStyle="light-content" translucent />
 
       {/* --- HERO SECTION --- */}
-      <HeroSection place={parsedPlace} />
+      <HeroSection place={parsedPlace} photos={placePhotos} />
 
       {/* --- MAIN CONTENT SHEET --- */}
       <View style={styles.sheetContainer}>

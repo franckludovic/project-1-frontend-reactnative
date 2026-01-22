@@ -6,11 +6,19 @@ export async function fetchJSON(path: string, opts?: RequestInit) {
   if (!res.ok) {
     let errorMessage = `Request failed: ${res.status}`;
     try {
-      const errorData = await res.json();
-      if (errorData.message) {
-        errorMessage += ` - ${errorData.message}`;
-        if (errorData.errors && Array.isArray(errorData.errors)) {
-          errorMessage += ` - ${errorData.errors.join(', ')}`;
+      const contentType = res.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        const errorData = await res.json();
+        if (errorData.message) {
+          errorMessage += ` - ${errorData.message}`;
+          if (errorData.errors && Array.isArray(errorData.errors)) {
+            errorMessage += ` - ${errorData.errors.join(', ')}`;
+          }
+        }
+      } else {
+        const textResponse = await res.text();
+        if (textResponse) {
+          errorMessage += ` - ${textResponse.substring(0, 100)}`; // First 100 chars
         }
       }
     } catch (e) {
@@ -18,7 +26,13 @@ export async function fetchJSON(path: string, opts?: RequestInit) {
     }
     throw new Error(errorMessage);
   }
-  return res.json();
+  const contentType = res.headers.get('content-type');
+  if (contentType && contentType.includes('application/json')) {
+    return res.json();
+  } else {
+    const text = await res.text();
+    throw new Error(`Expected JSON response but got: ${text.substring(0, 100)}`);
+  }
 }
 
 export function get(path: string, options?: RequestInit) {

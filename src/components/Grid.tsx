@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, StyleSheet, FlatList, Dimensions } from 'react-native';
+import { View, StyleSheet, FlatList, Dimensions, RefreshControl } from 'react-native';
 
 const { width } = Dimensions.get('window');
 
@@ -9,6 +9,7 @@ type GridProps<T> = {
   keyExtractor: (item: T, index: number) => string;
   numColumns?: number;
   contentContainerStyle?: any;
+  refreshControl?: React.ReactElement<RefreshControl>;
 };
 
 const Grid = <T,>({ data, renderItem, keyExtractor, numColumns = 2, contentContainerStyle }: GridProps<T>) => {

@@ -1,13 +1,15 @@
 import React, { useState } from 'react';
 import {
   View, Text, StyleSheet, SafeAreaView, TextInput,
-  TouchableOpacity, ScrollView, Image, Alert, Dimensions
+  TouchableOpacity, ScrollView, Image, Alert, Dimensions, FlatList
 } from 'react-native';
 import { useLocalSearchParams, useNavigation } from 'expo-router';
 import Icon from 'react-native-vector-icons/FontAwesome';
 import { COLORS } from '../constants';
 import { useAuth } from '../context/AuthContext';
-import { post } from '../services/api';
+import { createPlace } from '../services/placeService';
+import { addPlacePhoto } from '../services/photoService';
+import ImagePickerModal from '../components/ImagePickerModal';
 
 const { width } = Dimensions.get('window');
 
@@ -20,6 +22,8 @@ const CreatePlaceScreen: React.FC = () => {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [images, setImages] = useState<string[]>(imageUri ? [String(imageUri)] : []);
+  const [isImagePickerVisible, setIsImagePickerVisible] = useState(false);
 
 
   const formatLocationTime = () => {
@@ -30,6 +34,18 @@ const CreatePlaceScreen: React.FC = () => {
 
   const lat = latitude !== undefined ? parseFloat(latitude as string) : null;
   const lng = longitude !== undefined ? parseFloat(longitude as string) : null;
+
+  const handleImageSelected = (uri: string | string[]) => {
+    if (Array.isArray(uri)) {
+      setImages(prev => [...prev, ...uri]);
+    } else {
+      setImages(prev => [...prev, uri]);
+    }
+  };
+
+  const removeImage = (index: number) => {
+    setImages(prev => prev.filter((_, i) => i !== index));
+  };
 
 const savePlace = async () => {
 
@@ -43,50 +59,53 @@ const savePlace = async () => {
     return;
   }
 
-  if (!tokens?.accessToken) {
+  if (!user) {
     Alert.alert('Error', 'You must be logged in to create places');
     return;
   }
 
-  const payload = {
+  const placeData = {
     title: title.trim(),
     description: description.trim(),
     latitude: lat,
     longitude: lng,
-    image_url: imageUri ? String(imageUri) : 'https://picsum.photos/400',
-    user_id: (user as any)?.id
+    user_id: (user as any)?.user_id,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
   };
 
   console.log(
-    'Sending JSON payload:',
-    JSON.stringify(payload, null, 2)
+    'Creating place in local database:',
+    JSON.stringify(placeData, null, 2)
   );
 
   setIsLoading(true);
 
   try {
-    const res = await post(
-      'places',
-      payload,
-      {
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${tokens.accessToken}`,
-        },
-      }
-    );
+    const result = await createPlace(placeData);
 
-    console.log('Place created:', res?.data);
+    console.log('Place created with ID:', result);
+
+    // Save all photos
+    for (let i = 0; i < images.length; i++) {
+      await addPlacePhoto({
+        place_id: result,
+        photo_url: images[i],
+        display_order: i,
+        synched: 0,
+        created_at: new Date().toISOString(),
+      });
+    }
 
     Alert.alert('Success', 'Place created successfully!');
     navigation.goBack();
 
   } catch (err: any) {
-    console.log('API ERROR:', err?.response || err);
+    console.log('Database ERROR:', err?.message || err);
 
     Alert.alert(
       'Error',
-      err?.response?.data?.message ||
+      err?.message ||
       'Failed to create place. Please try again.'
     );
 
@@ -101,9 +120,31 @@ const savePlace = async () => {
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
 
         <View style={styles.imageSection}>
-          <Image
-            source={{ uri: (imageUri as string) || 'https://picsum.photos/400' }}
-            style={styles.image}
+          <FlatList
+            data={images}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            keyExtractor={(item, index) => `${item}-${index}`}
+            renderItem={({ item, index }) => (
+              <View style={styles.imageContainer}>
+                <Image source={{ uri: item }} style={styles.image} />
+                <TouchableOpacity
+                  style={styles.removeImageButton}
+                  onPress={() => removeImage(index)}
+                >
+                  <Icon name="times" size={16} color="white" />
+                </TouchableOpacity>
+              </View>
+            )}
+            ListFooterComponent={
+              <TouchableOpacity
+                style={styles.addImageButton}
+                onPress={() => setIsImagePickerVisible(true)}
+              >
+                <Icon name="plus" size={24} color={COLORS.primary} />
+                <Text style={styles.addImageText}>Add Photo</Text>
+              </TouchableOpacity>
+            }
           />
         </View>
 
@@ -140,6 +181,13 @@ const savePlace = async () => {
         </View>
 
       </ScrollView>
+
+      <ImagePickerModal
+        visible={isImagePickerVisible}
+        onClose={() => setIsImagePickerVisible(false)}
+        onImageSelected={handleImageSelected}
+        allowMultiple={true}
+      />
     </SafeAreaView>
   );
 };
@@ -175,12 +223,42 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
   imageSection: {
-    marginBottom: 24,
+    marginBottom: 30,
+    paddingVertical: 15
   },
   image: {
-    width: '100%',
+    width: 300,
     height: 250,
     borderRadius: 16,
+  },
+  imageContainer: {
+    position: 'relative',
+    marginRight: 10,
+  },
+  removeImageButton: {
+    position: 'absolute',
+    top: 5,
+    right: 5,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    borderRadius: 12,
+    padding: 4,
+  },
+  addImageButton: {
+    width: 300,
+    height: 250,
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: COLORS.primary,
+    borderStyle: 'dashed',
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,123,255,0.1)',
+  },
+  addImageText: {
+    color: COLORS.primary,
+    fontSize: 16,
+    fontWeight: '600',
+    marginTop: 8,
   },
   locationPill: {
     flexDirection: 'row',

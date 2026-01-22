@@ -1,12 +1,12 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity, ImageSourcePropType, Alert } from 'react-native';
+import React from 'react';
+import { View, Text, StyleSheet, Image, TouchableOpacity } from 'react-native';
 import Icon from 'react-native-vector-icons/FontAwesome';
+
 const reactLogo = require('../assets/images/image 2.jpg');
 
 type Props = {
   title: string;
   location?: string;
-  imageSource?: ImageSourcePropType;
   imageUrl?: string;
   onPress?: () => void;
   onFavoritePress?: () => void;
@@ -15,26 +15,41 @@ type Props = {
   synched?: boolean;
 };
 
-const PlaceCard: React.FC<Props> = ({ title, location, imageSource, imageUrl, onPress, onFavoritePress, isFavorite, placeId, synched }) => {
+const PlaceCard: React.FC<Props> = ({
+  title,
+  location,
+  imageUrl,
+  onPress,
+  onFavoritePress,
+  isFavorite,
+  synched,
+}) => {
   const fallback = reactLogo;
-  const source: any = imageSource ?? (imageUrl ? { uri: imageUrl } : fallback);
+  const source = imageUrl ? { uri: imageUrl } : fallback;
 
   return (
     <TouchableOpacity style={styles.container} onPress={onPress} activeOpacity={0.8}>
       <Image source={source} style={styles.image} />
       <View style={styles.overlay} />
+
       {synched !== undefined && (
         <View style={[styles.syncBadge, synched ? styles.synchedBadge : styles.unsynchedBadge]}>
-          <Text style={styles.syncBadgeText}>{synched ? 'synched' : 'Unsynched'}</Text>
+          <Text style={styles.syncBadgeText}>{synched ? 'Synched' : 'Unsynched'}</Text>
         </View>
       )}
+
       <TouchableOpacity
         style={styles.favoriteButton}
         onPress={onFavoritePress}
         activeOpacity={0.7}
       >
-        <Icon name={isFavorite ? 'heart' : 'heart-o'} size={20} color={isFavorite ? '#FF6B6B' : '#666'} />
+        <Icon
+          name={isFavorite ? 'heart' : 'heart-o'}
+          size={20}
+          color={isFavorite ? '#FF6B6B' : '#666'}
+        />
       </TouchableOpacity>
+
       <View style={styles.content}>
         <Text style={styles.title}>{title}</Text>
         {location && (
@@ -49,12 +64,24 @@ const PlaceCard: React.FC<Props> = ({ title, location, imageSource, imageUrl, on
 };
 
 const styles = StyleSheet.create({
-  container: { width: 175, height: 175, borderRadius: 12, overflow: 'hidden', marginRight: 12, backgroundColor: '#F6F6F6' },
+  container: {
+    width: 175,
+    height: 175,
+    borderRadius: 12,
+    overflow: 'hidden',
+    marginRight: 12,
+    backgroundColor: '#F6F6F6',
+  },
   image: { ...StyleSheet.absoluteFillObject, width: '100%', height: '100%' },
   overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.3)' },
-  favoriteButton: { position: 'absolute', top: 8, right: 8, backgroundColor: 'rgba(255,255,255,0.8)', borderRadius: 16, padding: 4 },
-  disabledButton: { opacity: 0.5 },
-  favoriteIcon: { fontSize: 16 },
+  favoriteButton: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: 'rgba(255,255,255,0.8)',
+    borderRadius: 16,
+    padding: 4,
+  },
   syncBadge: {
     position: 'absolute',
     top: 8,
@@ -69,7 +96,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   unsynchedBadge: {
-    backgroundColor: '#f50b1fff', // red
+    backgroundColor: '#ff0000', // red
     width: 80,
     alignItems: 'center',
   },

@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, ScrollView, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, SafeAreaView, ScrollView, ActivityIndicator, RefreshControl } from 'react-native';
 import * as Location from 'expo-location';
 import { router } from 'expo-router';
 import { COLORS } from '../constants';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
+import { getNotesByUserId } from '../services/noteService';
 import Header from '../components/Header';
 import SearchBar from '../components/SearchBar';
 import FilterChips from '../components/notepage/FilterChips';
@@ -30,12 +31,13 @@ type Note = {
 type FilterType = 'all' | 'synched' | 'unsynched';
 
 const NotesScreen: React.FC = () => {
-  const { user, tokens } = useAuth();
+  const { user, tokens, authMode } = useAuth();
   const [notes, setNotes] = useState<Note[]>([]);
   const [filteredNotes, setFilteredNotes] = useState<Note[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedFilter, setSelectedFilter] = useState<FilterType>('all');
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     fetchNotes();
@@ -70,24 +72,43 @@ const NotesScreen: React.FC = () => {
   };
 
   const fetchNotes = async () => {
-    if (!tokens?.accessToken) {
+    if (!user) {
       setLoading(false);
       return;
     }
+
     try {
-      const response = await api.get('/notes', {
-        headers: {
-          'Authorization': `Bearer ${tokens.accessToken}`
-        }
-      });
       let notesData = [];
-      if (response.data.success && response.data.data) {
-        notesData = response.data.data;
-      } else if (Array.isArray(response.data)) {
-        notesData = response.data;
+
+      if (authMode === 'offline') {
+        // Use local service for offline mode
+        const userId = typeof user === 'object' ? (user.user_id || user.id) : user;
+        if (!userId) {
+          setLoading(false);
+          return;
+        }
+        notesData = await getNotesByUserId(Number(userId));
+      } else {
+        // Use API service for online mode
+        if (!tokens?.accessToken) {
+          setLoading(false);
+          return;
+        }
+
+        const response = await api.get('/notes', {
+          headers: {
+            'Authorization': `Bearer ${tokens.accessToken}`
+          }
+        });
+
+        if (response.data.success && response.data.data) {
+          notesData = response.data.data;
+        } else if (Array.isArray(response.data)) {
+          notesData = response.data;
+        }
       }
 
-      // Transform backend data to component format
+      // Transform data to component format
       const transformedNotes: Note[] = await Promise.all(notesData.map(async (note: any) => {
         const locationName = await getLocationName(note.latitude, note.longitude);
         return {
@@ -96,9 +117,9 @@ const NotesScreen: React.FC = () => {
           content: note.content,
           location: locationName,
           date: new Date(note.created_at).toLocaleDateString(),
-          imageUrl: note.photos.length > 0 ? note.photos[0].photo_url : undefined,
-          tags: generateTags(note), // Implement based on data
-          attachmentsCount: note.photos.length,
+          imageUrl: note.photos?.length > 0 ? note.photos[0].photo_url : undefined,
+          tags: generateTags(note),
+          attachmentsCount: note.photos?.length || 0,
           synched: note.synched === 1,
         };
       }));
@@ -160,6 +181,12 @@ const NotesScreen: React.FC = () => {
       pathname: "/note/[noteId]",
       params: { noteId: note.id.toString() },
     });
+  };
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await fetchNotes();
+    setRefreshing(false);
   };
 
   if (loading) {

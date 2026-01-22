@@ -18,6 +18,7 @@ import * as Location from 'expo-location';
 import { COLORS } from '../constants';
 import { useAuth } from '../context/AuthContext';
 import { createNote, CreateNoteData } from '../services/noteApi';
+import { createNote as createNoteLocal } from '../services/noteService';
 
 // Components
 import TitleInput from '../components/AddNote/TitleInput';
@@ -41,7 +42,7 @@ type Place = {
 type Photo = { uri: string };
 
 const AddNoteScreen: React.FC = () => {
-  const { user, tokens } = useAuth();
+  const { user, tokens, authMode } = useAuth();
   const { place: placeParam } = useLocalSearchParams<{ place: string }>();
 
   const [place, setPlace] = useState<Place | null>(null);
@@ -167,7 +168,7 @@ const AddNoteScreen: React.FC = () => {
 
   // Save function
   const saveNote = async () => {
-    if (!place || !user || !tokens?.accessToken) return;
+    if (!place || !user) return;
 
     try {
       const userId = typeof user === 'object' ? (user.user_id || user.id) : user;
@@ -176,21 +177,41 @@ const AddNoteScreen: React.FC = () => {
         return;
       }
 
-      const noteData: CreateNoteData = {
-        user_id: Number(userId),
-        place_id: parseInt(place.id, 10),
-        title: title,
-        content: notes,
-        latitude: coords?.latitude || place.latitude,
-        longitude: coords?.longitude || place.longitude,
-        photos: photos.map((photo, index) => ({
-          photo_url: photo.uri,
-          local_path: null, // For now, not handling local paths
-          display_order: index
-        }))
-      };
+      if (authMode === 'offline') {
+        // Use local service for offline mode
+        const noteData = {
+          user_id: Number(userId),
+          place_id: parseInt(place.id, 10),
+          title: title,
+          content: notes,
+          latitude: coords?.latitude || place.latitude,
+          longitude: coords?.longitude || place.longitude,
+          synched: 0,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        };
 
-      await createNote(noteData, tokens.accessToken);
+        await createNoteLocal(noteData);
+      } else {
+        // Use API service for online mode
+        if (!tokens?.accessToken) return;
+
+        const noteData: CreateNoteData = {
+          user_id: Number(userId),
+          place_id: parseInt(place.id, 10),
+          title: title,
+          content: notes,
+          latitude: coords?.latitude || place.latitude,
+          longitude: coords?.longitude || place.longitude,
+          photos: photos.map((photo, index) => ({
+            photo_url: photo.uri,
+            local_path: null, // For now, not handling local paths
+            display_order: index
+          }))
+        };
+
+        await createNote(noteData, tokens.accessToken);
+      }
 
       Alert.alert('Saved', 'Note saved successfully');
       router.back();

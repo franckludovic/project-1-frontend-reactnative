@@ -16,6 +16,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
 import { getNoteById, updateNote, deleteNote, uploadImage, Note } from '../services/noteApi';
+import { getNoteById as getNoteByIdLocal, updateNote as updateNoteLocal, deleteNote as deleteNoteLocal } from '../services/noteService';
 import { API_BASE_URL } from '../config/config';
 import { useAuth } from '../context/AuthContext';
 
@@ -32,7 +33,7 @@ import Header from '../components/Header';
 import Button from '../components/Button';
 
 const NoteDetailsScreen: React.FC = () => {
-  const { user, tokens } = useAuth();
+  const { user, tokens, authMode } = useAuth();
   const { noteId } = useLocalSearchParams<{ noteId: string }>();
 
   const [note, setNote] = useState<Note | null>(null);
@@ -91,7 +92,16 @@ const NoteDetailsScreen: React.FC = () => {
 
   const fetchNoteDetails = async () => {
     try {
-      const noteData = await getNoteById(parseInt(noteId), tokens?.accessToken || '');
+      let noteData;
+
+      if (authMode === 'offline') {
+        // Use local service for offline mode
+        noteData = await getNoteByIdLocal(parseInt(noteId));
+      } else {
+        // Use API service for online mode
+        noteData = await getNoteById(parseInt(noteId), tokens?.accessToken || '');
+      }
+
       if (!noteData) {
         Alert.alert('Error', 'Note not found');
         router.back();

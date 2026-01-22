@@ -11,6 +11,7 @@ import {
   Animated,
   PanResponder,
   ActivityIndicator,
+  RefreshControl,
 } from "react-native";
 import { router } from "expo-router";
 import Icon from "react-native-vector-icons/FontAwesome";
@@ -19,15 +20,22 @@ import * as Location from "expo-location";
 import { COLORS } from "../constants";
 import { useAuth } from "../context/AuthContext";
 import { get } from "../services/api";
-import { addFavorite, removeFavorite, getFavorites } from "../services/favoriteApi";
+import { addFavorite as addFavoriteApi, removeFavorite as removeFavoriteApi, getFavorites as getFavoritesApi } from "../services/favoriteApi";
+import { addFavorite, removeFavorite, getFavoritesByUserId, isFavorite } from "../services/favoriteService";
 import PlaceCard from "../components/PlaceCard";
 import Grid from "../components/Grid";
+import ImagePickerModal from "../components/ImagePickerModal";
+import { STATIC_BASE_URL } from "../config/config";
+import { getAllPlaces, getPlacesByUserId } from "../services/placeService";
+import { getPlacePhotos } from "../services/photoService";
+import { getCurrentLocation, reverseGeocode } from "../utils/locationUtils";
+import { takePicture } from "../utils/cameraUtils";
 
 const { height } = Dimensions.get("window");
 
 const PlacesScreen: React.FC = () => {
   const { tokens, user } = useAuth();
- const userID = typeof user === "string" ? null : user?.user_id ?? null;
+  const userID = typeof user === "string" ? null : user?.user_id ?? null;
 
 
   const [activeTab, setActiveTab] = useState("Viewed");
@@ -37,27 +45,29 @@ const PlacesScreen: React.FC = () => {
   const [plannedVisits, setPlannedVisits] = useState<any[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [isImagePickerVisible, setIsImagePickerVisible] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   const handleFavoriteToggle = async (placeId: string, isCurrentlyFavorite: boolean) => {
-    if (!tokens?.accessToken || !userID) {
+    if (!userID) {
       Alert.alert('Error', 'You must be logged in to manage favorites.');
       return;
     }
 
     try {
       if (isCurrentlyFavorite) {
-        // Remove favorite
-        const favArray = await getFavorites(tokens.accessToken);
+        // Remove favorite - get local favorites and find the one to remove
+        const favArray = await getFavoritesByUserId(userID as number);
         const favorite = favArray.find((f: any) => f.place_id === parseInt(placeId));
         if (favorite) {
-          await removeFavorite(favorite.fav_id, tokens.accessToken);
+          await removeFavorite(favorite.fav_id);
         }
 
         // Update Saved Places (remove from list)
         setSavedPlaces(prev => prev.filter(item => item.id !== placeId));
       } else {
         // Add favorite
-        await addFavorite({ user_id: userID, place_id: parseInt(placeId) }, tokens.accessToken);
+        await addFavorite({ user_id: userID as number, place_id: parseInt(placeId) });
       }
 
       // Update Recently Viewed (optimistic toggle)
@@ -102,46 +112,60 @@ const PlacesScreen: React.FC = () => {
 
   /* Fetch data */
   useEffect(() => {
-    if (!tokens?.accessToken) return;
+    if (!userID) return;
 
     const fetchData = async () => {
       try {
-        // Favorites
-        const favArray = await getFavorites(tokens.accessToken);
-
-        // My places
-        const res = await get("places/me", {
-          headers: { Authorization: `Bearer ${tokens.accessToken}` },
-        });
-
-        const placesArray = Array.isArray(res.data)
-          ? res.data
-          : res.data?.data ?? [];
+        // Get places by user ID using the service method
+        const placesArray = await getPlacesByUserId(userID);
 
         const enriched = await Promise.all(
-          placesArray.slice(0, 10).map(async (item: any) => ({
-            id: String(item.place_id),
-            place_id: item.place_id,
-            title: item.title,
-            location: await getReadableLocation(item.latitude, item.longitude),
-            rating: item.rating ?? 4.5,
-            isFavorite: item.is_favorite === 1,
-            image: { uri: item.image_url || "https://picsum.photos/400" },
-            latitude: item.latitude,
-            longitude: item.longitude,
-            timestamp: item.created_at || new Date().toISOString(),
-          }))
+          placesArray.slice(0, 10).map(async (item: any) => {
+            const reverseResult = await reverseGeocode(item.latitude, item.longitude);
+
+            // Get place photos and use the first one (display_order 0) as the main image
+            let image_url = "https://picsum.photos/400"; // default fallback
+            try {
+              const photos = await getPlacePhotos(item.place_id);
+              if (photos.length > 0) {
+                // Find the photo with display_order 0 (primary image)
+                const primaryPhoto = photos.find(photo => photo.display_order === 0) || photos[0];
+                if (primaryPhoto.photo_url) {
+                  image_url = primaryPhoto.photo_url.startsWith("http") || primaryPhoto.photo_url.startsWith("file://")
+                    ? primaryPhoto.photo_url
+                    : `${STATIC_BASE_URL}${primaryPhoto.photo_url}`;
+                }
+              }
+            } catch (photoError) {
+              console.log("Error fetching photos for place", item.place_id, photoError);
+              // Keep default image_url
+            }
+
+            return {
+              id: String(item.place_id),
+              place_id: item.place_id,
+              title: item.title,
+              location: reverseResult.success ? reverseResult.readableName : `${item.latitude.toFixed(4)}, ${item.longitude.toFixed(4)}`,
+              rating: item.rating ?? 4.5,
+              isFavorite: item.is_favorite === 1,
+              image_url: image_url,
+              latitude: item.latitude,
+              longitude: item.longitude,
+              timestamp: item.created_at || new Date().toISOString(),
+            };
+          })
         );
 
-
         setRecentlyViewed(enriched);
+
       } catch (err: any) {
-        console.log("Fetch error:", err?.response?.data || err.message);
+        console.log("Fetch error:", err?.message || err);
+        Alert.alert('Error', 'Failed to load places');
       }
     };
 
     fetchData();
-  }, [tokens?.accessToken]);
+  }, [userID]);
 
   /* Bottom sheet drag */
   const panResponder = useRef(
@@ -171,24 +195,13 @@ const PlacesScreen: React.FC = () => {
   ).current;
 
   /* Camera */
-  const openCamera = async () => {
+  const openCamera = () => {
+    setIsImagePickerVisible(true);
+  };
+
+  const handleImageSelected = async (uri: string) => {
     try {
       setIsProcessing(true);
-
-      const camPerm = await ImagePicker.requestCameraPermissionsAsync();
-      if (!camPerm.granted) {
-        Alert.alert("Permission required", "Camera permission is required");
-        return;
-      }
-
-      const result = await ImagePicker.launchCameraAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [4, 3],
-        quality: 1,
-      });
-
-      if (result.canceled) return;
 
       const locPerm = await Location.requestForegroundPermissionsAsync();
       if (locPerm.status !== "granted") {
@@ -203,7 +216,7 @@ const PlacesScreen: React.FC = () => {
       router.push({
         pathname: "/CreatePlace",
         params: {
-          imageUri: result.assets[0].uri,
+          imageUri: uri,
           latitude: location.coords.latitude.toString(),
           longitude: location.coords.longitude.toString(),
           timestamp: new Date().toISOString(),
@@ -215,6 +228,12 @@ const PlacesScreen: React.FC = () => {
     } finally {
       setIsProcessing(false);
     }
+  };
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await fetchData();
+    setRefreshing(false);
   };
 
   const tabs = ["Viewed", "Nearby", "Planned Visit"];
@@ -258,28 +277,37 @@ const PlacesScreen: React.FC = () => {
               <Text style={styles.sectionTitle}>Recently Viewed</Text>
               <Grid
                 data={recentlyViewed}
-                renderItem={({ item }) => (
-                  <View style={styles.gridItem}>
-                    <PlaceCard
-                      title={item.title}
-                      location={item.location}
-                      imageSource={item.image}
-                      onPress={() =>
-                        router.push({
-                          pathname: "/place/[placeId]",
-                          params: { placeId: String(item.place_id) },
-                        })
-                      }
-                      onFavoritePress={() => handleFavoriteToggle(item.id, item.isFavorite)}
-                      isFavorite={item.isFavorite}
-                      placeId={parseInt(item.id)}
-                    />
-                  </View>
-                )}
+                renderItem={({ item }) => {
+                  // 👇 Debug log
+                  console.log("Image URL:", item.image_url);
+
+                  return (
+                    <View style={styles.gridItem}>
+                      <PlaceCard
+                        title={item.title}
+                        location={item.location}
+                        imageUrl={item.image_url}
+                        onPress={() =>
+                          router.push({
+                            pathname: "/place/[placeId]",
+                            params: { placeId: String(item.place_id) },
+                          })
+                        }
+                        onFavoritePress={() => handleFavoriteToggle(item.id, item.isFavorite)}
+                        isFavorite={item.isFavorite}
+                        placeId={item.place_id}
+                      />
+                    </View>
+                  );
+                }}
                 keyExtractor={(item) => item.id}
                 numColumns={2}
                 contentContainerStyle={styles.gridContainer}
+                refreshControl={
+                  <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+                }
               />
+
             </View>
           )}
 
@@ -315,6 +343,13 @@ const PlacesScreen: React.FC = () => {
           <Text style={styles.loaderText}>Preparing place…</Text>
         </View>
       )}
+
+      {/* Image Picker Modal */}
+      <ImagePickerModal
+        visible={isImagePickerVisible}
+        onClose={() => setIsImagePickerVisible(false)}
+        onImageSelected={handleImageSelected}
+      />
     </SafeAreaView>
   );
 };
@@ -331,7 +366,7 @@ const styles = StyleSheet.create({
   },
   bottomSheet: {
     position: "absolute",
-    top: height * 0.15, // Takes more screen space
+    top: height * 0.15,
     left: 0,
     right: 0,
     bottom: 0,

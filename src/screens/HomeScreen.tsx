@@ -113,7 +113,17 @@ const AuthenticatedHomeScreen: React.FC<Props> = ({ userName = 'Traveler', avata
         <WelcomeHeader userName={userName} avatar={localAvatar} avatarUrl={avatarUrl} />
 
         {/* Sync Status */}
-        <SyncStatus icon="✓" label="ALL MEMORIES synched" />
+        <SyncStatus />
+
+        {/* Debug Button */}
+        <View style={styles.section}>
+          <TouchableOpacity
+            style={styles.debugButton}
+            onPress={() => router.push('/debug')}
+          >
+            <Text style={styles.debugButtonText}>Debug Screen</Text>
+          </TouchableOpacity>
+        </View>
 
         {/* Recent Travel Notes Section */}
         <View style={styles.section}>
@@ -208,6 +218,20 @@ const styles = StyleSheet.create({
     elevation: 5,
   },
   floatingButtonText: { fontSize: 28, color: '#fff', fontWeight: '300' },
+  debugButton: {
+    backgroundColor: COLORS.orange,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    alignSelf: 'center',
+    marginBottom: 12,
+  },
+  debugButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
 });
 
 export default AuthenticatedHomeScreen;

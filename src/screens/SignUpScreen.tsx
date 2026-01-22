@@ -7,6 +7,8 @@ import Button from '../components/Button';
 import CenteredView from '../components/CenteredView';
 import { post } from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import { useNetworkState } from '../utils/networkUtils';
+import { createUserOffline } from '../services/userService';
 
 type Errors = {
   fullName?: string;
@@ -28,6 +30,7 @@ const SignUpScreen: React.FC<Props> = ({ onLogin }) => {
   const [errors, setErrors] = useState<Errors>({});
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const auth = useAuth();
+  const { isConnected } = useNetworkState();
   const [loading, setLoading] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
 
@@ -62,7 +65,7 @@ const SignUpScreen: React.FC<Props> = ({ onLogin }) => {
     return Object.keys(newErrors).length === 0 && agreedToTerms;
   };
 
-  const handleSignUp = () => {
+  const handleSignUp = async () => {
     if (loading) return;
     if (!agreedToTerms) {
       setServerError('You must agree to the Terms of Service and Privacy Policy');
@@ -72,19 +75,31 @@ const SignUpScreen: React.FC<Props> = ({ onLogin }) => {
     if (validateForm()) {
       setServerError(null);
       setLoading(true);
-      post('/auth/register', { full_name: fullName, email, password, role: 'ROLE_USER' })
-        .then((res: any) => {
-          const payload = res?.data ?? res;
-          const user = payload?.user ?? payload;
-          const tokens = {
-            accessToken: payload?.accessToken || payload?.access_token,
-            refreshToken: payload?.refreshToken || payload?.refresh_token,
-          };
-          auth.signIn(user, tokens);
+
+      try {
+        // Try online registration first
+        const res = await post('/auth/register', { full_name: fullName, email, password, role: 'user' });
+        const payload = res?.data ?? res;
+        const user = payload?.user ?? payload;
+        const tokens = {
+          accessToken: payload?.accessToken || payload?.access_token,
+          refreshToken: payload?.refreshToken || payload?.refresh_token,
+        };
+        auth.signIn(user, tokens);
+        router.push('/home');
+      } catch (err: any) {
+        // If online fails, try offline registration
+        console.log('Online registration failed, trying offline:', err.message);
+        try {
+          await createUserOffline({ full_name: fullName, email, password, role: 'user' });
+          await auth.signInOffline({ email, full_name: fullName });
           router.push('/home');
-        })
-        .catch((err: Error) => setServerError((err as any)?.message || 'Registration failed'))
-        .finally(() => setLoading(false));
+        } catch (offlineErr: any) {
+          setServerError(offlineErr.message || 'Registration failed');
+        }
+      } finally {
+        setLoading(false);
+      }
     }
   };
 
@@ -111,7 +126,7 @@ const SignUpScreen: React.FC<Props> = ({ onLogin }) => {
             <View style={styles.form}>
               <TextInput
                 label="Full Name"
-                placeholder="John Doe"
+                placeholder="Lichtteinvigh"
                 value={fullName}
                 onChangeText={setFullName}
                 error={errors.fullName}

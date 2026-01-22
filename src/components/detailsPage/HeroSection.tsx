@@ -12,6 +12,7 @@ import {
 import { router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import Icon from 'react-native-vector-icons/MaterialIcons';
+import ImageCarousel from '../noteDetails/ImageCarousel';
 
 const { width, height } = Dimensions.get('window');
 
@@ -37,36 +38,105 @@ const COLORS = {
 };
 
 type Place = {
-  id: string;
+  place_id?: number;
+  id?: string;
   title: string;
-  location: string;
-  category: string;
-  rating: number;
-  image: any;
+  description?: string;
   latitude: number;
   longitude: number;
-  subtitle?: string;
   synched?: number;
+  created_at?: string;
+  updated_at?: string;
+  user_id?: number;
+  // Legacy fields for backward compatibility
+  location?: string;
+  category?: string;
+  rating?: number;
+  image_url?: string;
+  subtitle?: string;
+};
+
+type PlacePhoto = {
+  photo_id?: number;
+  place_id: number;
+  photo_url?: string;
+  local_path?: string | null;
+  display_order?: number;
 };
 
 type HeroSectionProps = {
   place: Place;
+  photos?: PlacePhoto[];
 };
 
-const HeroSection: React.FC<HeroSectionProps> = ({ place }) => {
+const HeroSection: React.FC<HeroSectionProps> = ({ place, photos = [] }) => {
   const [isFavorite, setIsFavorite] = useState(false);
 
   const toggleFavorite = () => {
     setIsFavorite(!isFavorite);
   };
 
+  // If there are photos, use the ImageCarousel
+  if (photos.length > 0) {
+    return (
+      <View style={styles.carouselContainer}>
+        <ImageCarousel photos={photos} />
+        <View style={styles.carouselOverlay} />
+
+        {/* Top Bar (Back & Share) */}
+        <SafeAreaView style={styles.topBarSafe}>
+          <View style={styles.topBar}>
+            <TouchableOpacity style={styles.glassButton} onPress={() => router.back()}>
+              <Icon name="arrow-back" size={24} color="#fff" />
+            </TouchableOpacity>
+            <View style={styles.rightIcons}>
+              <TouchableOpacity style={styles.glassButton}>
+                <Icon name="ios-share" size={20} color="#fff" />
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.glassButton} onPress={toggleFavorite}>
+                <Icon name={isFavorite ? "favorite" : "favorite-border"} size={20} color={isFavorite ? "#ff6b6b" : "#fff"} />
+              </TouchableOpacity>
+            </View>
+          </View>
+        </SafeAreaView>
+
+        {/* Bottom Hero Content */}
+        <View style={styles.heroContent}>
+          {(place.category || place.rating) && (
+            <View style={styles.tagsRow}>
+              {place.category && (
+                <View style={styles.tagBadge}>
+                  <Text style={styles.tagText}>{place.category}</Text>
+                </View>
+              )}
+              {place.rating && (
+                <View style={styles.ratingContainer}>
+                  <Icon name="star" size={16} color="#fbbf24" />
+                  <Text style={styles.ratingText}>{place.rating}</Text>
+                </View>
+              )}
+            </View>
+          )}
+          <Text style={styles.heroTitle}>{place.title}</Text>
+          {place.location && (
+            <Text style={styles.heroSubtitle} numberOfLines={2}>
+              {place.location}
+            </Text>
+          )}
+        </View>
+      </View>
+    );
+  }
+
+  // Default single image view
   return (
     <View style={styles.heroContainer}>
       <ImageBackground
-        source={place.image}
+        source={{ uri: place.image_url || "https://picsum.photos/400" }}
         style={styles.heroImage}
         resizeMode="cover"
       >
+
         {/* Gradient Overlay */}
         <LinearGradient
           colors={['rgba(0,0,0,0.9)', 'rgba(0,0,0,0.2)', 'rgba(0,0,0,0.3)']}
@@ -94,19 +164,27 @@ const HeroSection: React.FC<HeroSectionProps> = ({ place }) => {
 
         {/* Bottom Hero Content */}
         <View style={styles.heroContent}>
-          <View style={styles.tagsRow}>
-            <View style={styles.tagBadge}>
-              <Text style={styles.tagText}>{place.category}</Text>
+          {(place.category || place.rating) && (
+            <View style={styles.tagsRow}>
+              {place.category && (
+                <View style={styles.tagBadge}>
+                  <Text style={styles.tagText}>{place.category}</Text>
+                </View>
+              )}
+              {place.rating && (
+                <View style={styles.ratingContainer}>
+                  <Icon name="star" size={16} color="#fbbf24" />
+                  <Text style={styles.ratingText}>{place.rating}</Text>
+                </View>
+              )}
             </View>
-            <View style={styles.ratingContainer}>
-              <Icon name="star" size={16} color="#fbbf24" />
-              <Text style={styles.ratingText}>{place.rating}</Text>
-            </View>
-          </View>
+          )}
           <Text style={styles.heroTitle}>{place.title}</Text>
-          <Text style={styles.heroSubtitle} numberOfLines={2}>
-            {place.location}
-          </Text>
+          {place.location && (
+            <Text style={styles.heroSubtitle} numberOfLines={2}>
+              {place.location}
+            </Text>
+          )}
         </View>
       </ImageBackground>
     </View>
@@ -117,6 +195,15 @@ const styles = StyleSheet.create({
   heroContainer: {
     height: height * 0.4,
     width: '100%',
+  },
+  carouselContainer: {
+    height: height * 0.4,
+    width: '100%',
+    position: 'relative',
+  },
+  carouselOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.3)',
   },
   heroImage: {
     width: '100%',

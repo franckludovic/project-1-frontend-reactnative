@@ -1,7 +1,13 @@
 import { Stack } from 'expo-router';
+import { useEffect } from 'react';
 import { AuthProvider } from '../src/context/AuthContext';
+import { initDb } from '../src/database/database';
 
 export default function RootLayout() {
+  useEffect(() => {
+    initDb(); 
+  }, []);
+
   return (
     <AuthProvider>
       <Stack>
