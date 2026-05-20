@@ -203,7 +203,7 @@ const SignUpScreen: React.FC<Props> = ({ onLogin }) => {
           'rgba(255, 255, 255, 0.6)', 
           'transparent'
         ]}
-        locations={[0, 0.58, 0.65, 0.8, 0.98]}
+        locations={[0, 0.25, 0.35, 0.5, 0.72]}
         style={StyleSheet.absoluteFillObject}
       />
 
@@ -213,6 +213,9 @@ const SignUpScreen: React.FC<Props> = ({ onLogin }) => {
           showsVerticalScrollIndicator={false} 
           keyboardShouldPersistTaps="handled"
         >
+          {/* Spacer to push content down */}
+          <View style={styles.topSpacer} />
+
           {/* Main transparent content overlay card */}
           <View style={styles.contentCard}>
             <View style={styles.logoContainer}>
@@ -230,23 +233,30 @@ const SignUpScreen: React.FC<Props> = ({ onLogin }) => {
 
             {/* Registration Form */}
             <View style={styles.form}>
-              <TextInput
-                label="Full Name"
-                placeholder="Jane Doe"
-                value={fullName}
-                onChangeText={setFullName}
-                error={errors.fullName}
-                leftIcon="person-outline"
-              />
-              <TextInput
-                label="Username"
-                placeholder="wanderer_123"
-                value={username}
-                onChangeText={setUsername}
-                error={errors.username}
-                autoCapitalize="none"
-                leftIcon="at-outline"
-              />
+              {/* Row 1: Full Name & Username */}
+              <View style={styles.inputRow}>
+                <TextInput
+                  label="Full Name"
+                  placeholder="Jane Doe"
+                  value={fullName}
+                  onChangeText={setFullName}
+                  error={errors.fullName}
+                  leftIcon="person-outline"
+                  containerStyle={styles.halfInputLeft}
+                />
+                <TextInput
+                  label="Username"
+                  placeholder="wanderer_123"
+                  value={username}
+                  onChangeText={setUsername}
+                  error={errors.username}
+                  autoCapitalize="none"
+                  leftIcon="at-outline"
+                  containerStyle={styles.halfInputRight}
+                />
+              </View>
+
+              {/* Row 2: Email Address */}
               <TextInput
                 label="Email Address"
                 placeholder="your@email.com"
@@ -257,26 +267,31 @@ const SignUpScreen: React.FC<Props> = ({ onLogin }) => {
                 autoCapitalize="none"
                 leftIcon="mail-outline"
               />
-              <TextInput
-                label="Password"
-                placeholder="Min. 8 characters"
-                value={password}
-                onChangeText={setPassword}
-                secureTextEntry={!showPassword}
-                error={errors.password}
-                leftIcon="lock-closed-outline"
-                rightIcon={renderPasswordToggle(showPassword, setShowPassword)}
-              />
-              <TextInput
-                label="Confirm Password"
-                placeholder="Confirm password"
-                value={confirmPassword}
-                onChangeText={setConfirmPassword}
-                secureTextEntry={!showConfirmPassword}
-                error={errors.confirmPassword}
-                leftIcon="lock-closed-outline"
-                rightIcon={renderPasswordToggle(showConfirmPassword, setShowConfirmPassword)}
-              />
+
+              {/* Row 3: Password & Confirm Password */}
+              
+                <TextInput
+                  label="Password"
+                  placeholder="Min. 8"
+                  value={password}
+                  onChangeText={setPassword}
+                  secureTextEntry={!showPassword}
+                  error={errors.password}
+                  leftIcon="lock-closed-outline"
+                  rightIcon={renderPasswordToggle(showPassword, setShowPassword)}
+                  
+                />
+                <TextInput
+                  label="Confirm Password"
+                  placeholder="Confirm Password"
+                  value={confirmPassword}
+                  onChangeText={setConfirmPassword}
+                  secureTextEntry={!showConfirmPassword}
+                  error={errors.confirmPassword}
+                  leftIcon="lock-closed-outline"
+                  rightIcon={renderPasswordToggle(showConfirmPassword, setShowConfirmPassword)}
+                />
+              
 
               {/* Terms Agreement */}
               <TouchableOpacity
@@ -297,6 +312,7 @@ const SignUpScreen: React.FC<Props> = ({ onLogin }) => {
               {serverError ? <Text style={styles.serverError}>{serverError}</Text> : null}
               
               <Button
+              
                 title={loading ? 'Creating...' : 'Create Account'}
                 onPress={handleSignUp}
                 disabled={loading}
@@ -329,9 +345,12 @@ const styles = StyleSheet.create({
   scroll: { 
     flexGrow: 1,
   },
+  topSpacer: {
+    height: 50,
+  },
   contentCard: {
     paddingHorizontal: 24,
-    paddingTop: 36,
+    paddingTop: 24,
     alignItems: 'center',
   },
   logoContainer: {
@@ -341,26 +360,26 @@ const styles = StyleSheet.create({
     backgroundColor: '#FF5A36',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 16,
+    marginBottom: 12,
     ...SHADOWS.light,
   },
   logo: { 
     fontSize: 32, 
     fontWeight: '800', 
     color: '#1E293B', 
-    marginBottom: 8, 
+    marginBottom: 6, 
     letterSpacing: -0.5,
   },
   tagline: { 
     fontSize: 14, 
     fontWeight: '600', 
     color: '#64748B',
-    marginBottom: 8,
+    marginBottom: 10,
   },
   loginPromptRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 24,
+    marginBottom: 16,
   },
   promptText: {
     fontSize: 14,
@@ -381,7 +400,7 @@ const styles = StyleSheet.create({
   termsContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginVertical: 14,
+    marginVertical: 8,
     paddingRight: 8,
   },
   checkbox: {
@@ -429,6 +448,17 @@ const styles = StyleSheet.create({
   },
   bottomSpacer: {
     height: 60,
+  },
+  inputRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
+  },
+  halfInputLeft: {
+    width: '48%',
+  },
+  halfInputRight: {
+    width: '48%',
   },
 });
 

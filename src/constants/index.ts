@@ -5,6 +5,7 @@ export const COLORS = {
   primaryLight: '#FFECE8',
   orange: '#FF5A36',
   accent: '#4F46E5', // Indigo accent for systems elements
+  accentLight: '#EEF2FF',
   
   // Surfaces & Backgrounds
   background: '#FDFBF7', // Light warm paper background

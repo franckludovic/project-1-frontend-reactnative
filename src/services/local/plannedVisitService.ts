@@ -12,58 +12,51 @@ export interface PlannedVisit {
 }
 
 export const createPlannedVisit = (visit: PlannedVisit): Promise<number> => {
-  return new Promise((resolve, reject) => {
-    db.transaction((tx: any) => {
-      tx.executeSql(
-        `INSERT INTO planned_visits (user_id, place_id, planned_date, synched, is_completed, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [visit.user_id, visit.place_id, visit.planned_date, visit.synched || 0, visit.is_completed || 0, visit.created_at, visit.updated_at],
-        (_: any, result: any) => resolve(result.insertId),
-        (_: any, error: any) => reject(error)
-      );
-    });
-  });
+  try {
+    const result = db.runSync(
+      `INSERT INTO planned_visits (user_id, place_id, planned_date, synched, is_completed, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [
+        visit.user_id,
+        visit.place_id,
+        visit.planned_date || null,
+        visit.synched || 0,
+        visit.is_completed || 0,
+        visit.created_at || new Date().toISOString(),
+        visit.updated_at || new Date().toISOString(),
+      ]
+    );
+    return Promise.resolve(result.lastInsertRowId);
+  } catch (error) {
+    return Promise.reject(error);
+  }
 };
 
 export const getPlannedVisitsByUserId = (userId: number): Promise<PlannedVisit[]> => {
-  return new Promise((resolve, reject) => {
-    db.transaction((tx: any) => {
-      tx.executeSql(
-        `SELECT * FROM planned_visits WHERE user_id = ?`,
-        [userId],
-        (_: any, result: any) => {
-          const visits: PlannedVisit[] = [];
-          for (let i = 0; i < result.rows.length; i++) {
-            visits.push(result.rows.item(i));
-          }
-          resolve(visits);
-        },
-        (_: any, error: any) => reject(error)
-      );
-    });
-  });
+  try {
+    const visits = db.getAllSync<PlannedVisit>(
+      `SELECT * FROM planned_visits WHERE user_id = ?`,
+      [userId]
+    );
+    return Promise.resolve(visits);
+  } catch (error) {
+    return Promise.reject(error);
+  }
 };
 
 export const getPlannedVisitsByPlaceId = (placeId: number): Promise<PlannedVisit[]> => {
-  return new Promise((resolve, reject) => {
-    db.transaction((tx: any) => {
-      tx.executeSql(
-        `SELECT * FROM planned_visits WHERE place_id = ?`,
-        [placeId],
-        (_: any, result: any) => {
-          const visits: PlannedVisit[] = [];
-          for (let i = 0; i < result.rows.length; i++) {
-            visits.push(result.rows.item(i));
-          }
-          resolve(visits);
-        },
-        (_: any, error: any) => reject(error)
-      );
-    });
-  });
+  try {
+    const visits = db.getAllSync<PlannedVisit>(
+      `SELECT * FROM planned_visits WHERE place_id = ?`,
+      [placeId]
+    );
+    return Promise.resolve(visits);
+  } catch (error) {
+    return Promise.reject(error);
+  }
 };
 
 export const updatePlannedVisit = (visitId: number, visit: Partial<PlannedVisit>): Promise<void> => {
-  return new Promise((resolve, reject) => {
+  try {
     const fields: string[] = [];
     const values: any[] = [];
     if (visit.planned_date !== undefined) { fields.push('planned_date = ?'); values.push(visit.planned_date); }
@@ -72,26 +65,24 @@ export const updatePlannedVisit = (visitId: number, visit: Partial<PlannedVisit>
     if (visit.updated_at !== undefined) { fields.push('updated_at = ?'); values.push(visit.updated_at); }
     values.push(visitId);
 
-    db.transaction((tx: any) => {
-      tx.executeSql(
-        `UPDATE planned_visits SET ${fields.join(', ')} WHERE planned_visit_id = ?`,
-        values,
-        () => resolve(),
-        (_: any, error: any) => reject(error)
-      );
-    });
-  });
+    db.runSync(
+      `UPDATE planned_visits SET ${fields.join(', ')} WHERE planned_visit_id = ?`,
+      values
+    );
+    return Promise.resolve();
+  } catch (error) {
+    return Promise.reject(error);
+  }
 };
 
 export const deletePlannedVisit = (visitId: number): Promise<void> => {
-  return new Promise((resolve, reject) => {
-    db.transaction((tx: any) => {
-      tx.executeSql(
-        `DELETE FROM planned_visits WHERE planned_visit_id = ?`,
-        [visitId],
-        () => resolve(),
-        (_: any, error: any) => reject(error)
-      );
-    });
-  });
+  try {
+    db.runSync(
+      `DELETE FROM planned_visits WHERE planned_visit_id = ?`,
+      [visitId]
+    );
+    return Promise.resolve();
+  } catch (error) {
+    return Promise.reject(error);
+  }
 };

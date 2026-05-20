@@ -5,8 +5,8 @@ import { COLORS } from '../constants';
 import WelcomeHeader from '../components/WelcomeHeader';
 import SyncStatus from '../components/SyncStatus';
 import TravelNoteCard from '../components/TravelNoteCard';
-import AttractionCard from '../components/AttractionCard';
 import FavoritePlaceCard from '../components/FavoritePlaceCard';
+import NearbyAttractionsCarousel from '../components/NearbyAttractionsCarousel';
 import { Ionicons } from '@expo/vector-icons';
 
 const localAvatar = require('../../src/assets/images/image 1.jpg');
@@ -18,14 +18,6 @@ type TravelNote = {
   imageUrl: string;
 };
 
-type Attraction = {
-  id: string;
-  title: string;
-  description: string;
-  distance: string;
-  icon: string;
-};
-
 type FavoritePlace = {
   id: string;
   title: string;
@@ -35,14 +27,22 @@ type FavoritePlace = {
   savedDate: string;
 };
 
+type Stats = {
+  posts: number;
+  planned: number;
+  saved: number;
+  synced: string;
+};
+
 type Props = {
   userName?: string;
   avatarUrl?: string;
   onLogout?: () => void;
   onAddPlace?: () => void;
+  stats?: Stats;
 };
 
-const AuthenticatedHomeScreen: React.FC<Props> = ({ userName = 'Traveler', avatarUrl, onLogout, onAddPlace }) => {
+const AuthenticatedHomeScreen: React.FC<Props> = ({ userName = 'Traveler', avatarUrl, onLogout, onAddPlace, stats }) => {
   const router = useRouter();
 
   // Mock data (use local images from assets/images)
@@ -58,16 +58,6 @@ const AuthenticatedHomeScreen: React.FC<Props> = ({ userName = 'Traveler', avata
       title: 'Hiking the Alps',
       date: 'Sept 05, 2023',
       imageUrl: '',
-    },
-  ];
-
-  const attractions: Attraction[] = [
-    {
-      id: '1',
-      title: 'Hidden Waterfall',
-      description: 'A secret spot near the trail entrance.',
-      distance: '0.5KM',
-      icon: '🧭',
     },
   ];
 
@@ -106,9 +96,57 @@ const AuthenticatedHomeScreen: React.FC<Props> = ({ userName = 'Traveler', avata
     router.push('/debug');
   };
 
+  const renderStats = () => {
+    if (!stats) return null;
+
+    return (
+      <View style={styles.statsContainer}>
+        <View style={styles.statsRow}>
+          {/* Card 1: Posts */}
+          <View style={styles.statsCard}>
+            <View style={[styles.statsIconFrame, { backgroundColor: '#FFECE8' }]}>
+              <Ionicons name="document-text-outline" size={18} color="#FF5A36" />
+            </View>
+            <Text style={styles.statsValue}>{stats.posts}</Text>
+            <Text style={styles.statsLabel}>Total Posts</Text>
+          </View>
+
+          {/* Card 2: Planned Trips */}
+          <View style={styles.statsCard}>
+            <View style={[styles.statsIconFrame, { backgroundColor: '#EEF2FF' }]}>
+              <Ionicons name="calendar-outline" size={18} color="#4F46E5" />
+            </View>
+            <Text style={styles.statsValue}>{stats.planned}</Text>
+            <Text style={styles.statsLabel}>Planned Trips</Text>
+          </View>
+        </View>
+
+        <View style={styles.statsRow}>
+          {/* Card 3: Saved Posts */}
+          <View style={styles.statsCard}>
+            <View style={[styles.statsIconFrame, { backgroundColor: '#ECFDF5' }]}>
+              <Ionicons name="bookmark-outline" size={18} color="#10B981" />
+            </View>
+            <Text style={styles.statsValue}>{stats.saved}</Text>
+            <Text style={styles.statsLabel}>Saved Posts</Text>
+          </View>
+
+          {/* Card 4: Synced Status */}
+          <View style={styles.statsCard}>
+            <View style={[styles.statsIconFrame, { backgroundColor: '#FEF3C7' }]}>
+              <Ionicons name="cloud-done-outline" size={18} color="#F59E0B" />
+            </View>
+            <Text style={styles.statsValue}>{stats.synced}</Text>
+            <Text style={styles.statsLabel}>Synced Posts</Text>
+          </View>
+        </View>
+      </View>
+    );
+  };
+
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: COLORS.background }}>
-      <ScrollView showsVerticalScrollIndicator={false}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         {/* Welcome Header */}
         <WelcomeHeader userName={userName} avatar={localAvatar} avatarUrl={avatarUrl} />
 
@@ -126,6 +164,9 @@ const AuthenticatedHomeScreen: React.FC<Props> = ({ userName = 'Traveler', avata
             <Text style={styles.debugText}>Developer Debug</Text>
           </TouchableOpacity>
         </View>
+
+        {/* Stats Grid */}
+        {renderStats()}
 
         {/* Recent Travel Notes Section */}
         <View style={styles.section}>
@@ -152,14 +193,12 @@ const AuthenticatedHomeScreen: React.FC<Props> = ({ userName = 'Traveler', avata
           </ScrollView>
         </View>
 
-        {/* Nearby Attractions Section */}
+        {/* Nearby Attractions Carousel Section */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Nearby attractions</Text>
           </View>
-          {attractions.map((attraction) => (
-            <AttractionCard key={attraction.id} {...attraction} />
-          ))}
+          <NearbyAttractionsCarousel />
         </View>
 
         {/* Favorite Places Section */}
@@ -200,6 +239,9 @@ const AuthenticatedHomeScreen: React.FC<Props> = ({ userName = 'Traveler', avata
 };
 
 const styles = StyleSheet.create({
+  scrollContent: {
+    paddingBottom: 110, // Added padding so screen contents scroll cleanly beneath the absolute tab bar overlay
+  },
   section: { 
     marginBottom: 28,
   },
@@ -257,13 +299,56 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     position: 'absolute',
-    bottom: 24,
+    bottom: 100, // Shifted up so it stays clear of the custom bottom tab bar
     right: 24,
     shadowColor: COLORS.primary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 10,
     elevation: 6,
+  },
+  statsContainer: {
+    paddingHorizontal: 24,
+    marginBottom: 24,
+    gap: 12,
+  },
+  statsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  statsCard: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(15, 23, 42, 0.05)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.02,
+    shadowRadius: 6,
+    elevation: 1,
+  },
+  statsIconFrame: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
+  },
+  statsValue: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: COLORS.textMain,
+    marginBottom: 2,
+    letterSpacing: -0.3,
+  },
+  statsLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.textMuted,
   },
 });
 

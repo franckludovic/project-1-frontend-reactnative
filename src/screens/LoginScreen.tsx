@@ -1,18 +1,19 @@
 import React, { useState } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  SafeAreaView, 
-  Alert, 
-  ScrollView, 
-  TouchableOpacity, 
+import {
+  View,
+  Text,
+  StyleSheet,
+  SafeAreaView,
+  Alert,
+  ScrollView,
+  TouchableOpacity,
   Image,
   Dimensions
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../context/AuthContext';
 import Button from '../components/Button';
 import TextInput from '../components/TextInput';
@@ -23,7 +24,11 @@ import { Ionicons } from '@expo/vector-icons';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-const LoginScreen: React.FC = () => {
+type Props = {
+  onSignUp?: () => void;
+};
+
+const LoginScreen: React.FC<Props> = ({ onSignUp }) => {
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -65,7 +70,7 @@ const LoginScreen: React.FC = () => {
 
       if (data.session) {
         const sbUser = data.user;
-        
+
         // Check if user exists in public.users to get their relational ID
         let publicUser: any = null;
         try {
@@ -110,16 +115,56 @@ const LoginScreen: React.FC = () => {
     }
   };
 
+  const handleOfflineMode = async () => {
+    try {
+      setLoading(true);
+      // 1. Try to find the last saved user in AsyncStorage
+      const storedOfflineUser = await AsyncStorage.getItem('offline_user');
+      const storedOnlineUser = await AsyncStorage.getItem('online_user');
+      
+      let userToRestore = null;
+      if (storedOfflineUser) {
+        userToRestore = JSON.parse(storedOfflineUser);
+      } else if (storedOnlineUser) {
+        userToRestore = JSON.parse(storedOnlineUser);
+      }
+
+      if (userToRestore && userToRestore.email) {
+        // Sign in using the stored user info
+        await signIn(userToRestore);
+        router.replace('/home');
+      } else {
+        // No registered account found on this device
+        Alert.alert(
+          'No Account Found',
+          'No registered account was found on this device. Please create an account first.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Register Now', onPress: () => handleRegisterRedirect() }
+          ]
+        );
+      }
+    } catch (err: any) {
+      Alert.alert('Offline Mode Error', err.message || 'Could not launch offline mode');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleRegisterRedirect = () => {
-    router.push('/signup');
+    if (onSignUp) {
+      onSignUp();
+    } else {
+      router.push('/signup');
+    }
   };
 
   const renderPasswordToggle = () => (
     <TouchableOpacity onPress={() => setShowPassword(!showPassword)} activeOpacity={0.7} style={styles.eyeBtn}>
-      <Ionicons 
-        name={showPassword ? "eye" : "eye-off"} 
-        size={20} 
-        color="#64748B" 
+      <Ionicons
+        name={showPassword ? "eye" : "eye-off"}
+        size={20}
+        color="#64748B"
       />
     </TouchableOpacity>
   );
@@ -127,31 +172,34 @@ const LoginScreen: React.FC = () => {
   return (
     <View style={styles.container}>
       {/* Full screen background landscape image */}
-      <Image 
-        source={require('../assets/images/image 7.jpg')} 
-        style={styles.backgroundImage} 
+      <Image
+        source={require('../assets/images/image 7.jpg')}
+        style={styles.backgroundImage}
         resizeMode="cover"
       />
-      
+
       {/* Absolute overlay gradient fading seamlessly from solid white at top to transparent at the bottom */}
       <LinearGradient
         colors={[
-          '#ffffff', 
-          '#ffffff', 
-          'rgba(255, 255, 255, 0.95)', 
-          'rgba(255, 255, 255, 0.6)', 
+          '#ffffff',
+          '#ffffff',
+          'rgba(255, 255, 255, 0.95)',
+          'rgba(255, 255, 255, 0.6)',
           'transparent'
         ]}
-        locations={[0, 0.5, 0.58, 0.72, 0.95]}
+        locations={[0, 0.25, 0.35, 0.5, 0.72]}
         style={StyleSheet.absoluteFillObject}
       />
 
       <SafeAreaView style={styles.safeArea}>
-        <ScrollView 
-          contentContainerStyle={styles.scrollContainer} 
-          keyboardShouldPersistTaps="handled" 
+        <ScrollView
+          contentContainerStyle={styles.scrollContainer}
+          keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
+          {/* Spacer to push content down */}
+          <View style={styles.topSpacer} />
+
           {/* Main Content Area (transparent background to let gradient show through) */}
           <View style={styles.contentCard}>
             {/* Logo Container */}
@@ -198,6 +246,14 @@ const LoginScreen: React.FC = () => {
                 disabled={loading}
                 style={styles.loginButton}
               />
+
+              <TouchableOpacity 
+                style={styles.offlineModeButton}
+                onPress={handleOfflineMode}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.offlineModeText}>Continue in offline mode</Text>
+              </TouchableOpacity>
             </View>
           </View>
 
@@ -211,8 +267,8 @@ const LoginScreen: React.FC = () => {
 
             <View style={styles.socialButtonsRow}>
               {/* Google Liquid Glass Button */}
-              <TouchableOpacity 
-                style={styles.socialBtn} 
+              <TouchableOpacity
+                style={styles.socialBtn}
                 activeOpacity={0.8}
                 onPress={() => Alert.alert('Google Auth', 'Sign in with Google is under development.')}
               >
@@ -224,8 +280,8 @@ const LoginScreen: React.FC = () => {
               </TouchableOpacity>
 
               {/* Apple Liquid Glass Button */}
-              <TouchableOpacity 
-                style={styles.socialBtn} 
+              <TouchableOpacity
+                style={styles.socialBtn}
                 activeOpacity={0.8}
                 onPress={() => Alert.alert('Apple Auth', 'Sign in with Apple is under development.')}
               >
@@ -261,9 +317,12 @@ const styles = StyleSheet.create({
   scrollContainer: {
     flexGrow: 1,
   },
+  topSpacer: {
+    height: 50,
+  },
   contentCard: {
     paddingHorizontal: 24,
-    paddingTop: 36,
+    paddingTop: 24,
     alignItems: 'center',
   },
   logoContainer: {
@@ -273,14 +332,14 @@ const styles = StyleSheet.create({
     backgroundColor: '#FF5A36',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 16,
+    marginBottom: 12,
     ...SHADOWS.light,
   },
   title: {
     fontSize: 32,
     fontWeight: '800',
     color: '#1E293B',
-    marginBottom: 8,
+    marginBottom: 6,
     letterSpacing: -0.5,
   },
   subtitle: {
@@ -290,12 +349,12 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     paddingHorizontal: 30,
     fontWeight: '600',
-    marginBottom: 20,
+    marginBottom: 12,
   },
   signupPromptRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 24,
+    marginBottom: 16,
   },
   promptText: {
     fontSize: 14,
@@ -320,12 +379,23 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 4 },
   },
+  offlineModeButton: {
+    marginTop: 14,
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  offlineModeText: {
+    color: '#FF5A36',
+    fontSize: 14,
+    fontWeight: '700',
+    textDecorationLine: 'underline',
+  },
   eyeBtn: {
     padding: 4,
   },
   socialSection: {
     paddingHorizontal: 24,
-    marginTop: 20,
+    marginTop: 12,
   },
   dividerRow: {
     flexDirection: 'row',

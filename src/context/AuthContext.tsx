@@ -100,7 +100,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         // Store online user for persistence
         await AsyncStorage.setItem('online_user', JSON.stringify(finalUser));
-        const realTokenData = createRealTokenData(session.access_token, finalUser.user_id, finalUser);
+        const expiresAt = session.expires_at ? new Date(session.expires_at * 1000).toISOString() : undefined;
+        const realTokenData = createRealTokenData(session.access_token, finalUser.user_id, finalUser, expiresAt);
         await storeToken(realTokenData);
 
         // If there was any offline data accumulated, sync it now!
@@ -108,10 +109,31 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           await triggerSync();
         }
       } else {
-        // No session - check if we are in offline pseudo token mode
+        // No session - check if we are in offline mode or if we are offline with a real token
         const storedToken = await getStoredToken();
-        if (storedToken && storedToken.type === 'pseudo') {
-          // Keep offline state
+        if (storedToken) {
+          if (storedToken.type === 'pseudo') {
+            // Keep offline state
+            const storedUser = await AsyncStorage.getItem('offline_user');
+            if (storedUser) {
+              setUser(JSON.parse(storedUser));
+              setAuthMode('offline');
+              setHasOfflineData(true);
+            }
+          } else if (storedToken.type === 'real' && !isOnline) {
+            // We have a real token but we are offline right now!
+            // Let the user stay logged in in offline mode
+            const storedUser = await AsyncStorage.getItem('online_user');
+            if (storedUser) {
+              setUser(JSON.parse(storedUser));
+              setAuthMode('offline');
+            }
+          } else {
+            // Clear everything if online and session is really gone
+            setUser(null);
+            setTokens(null);
+            setAuthMode('pending');
+          }
         } else {
           // Clear everything
           setUser(null);
@@ -125,20 +147,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => {
       subscription.unsubscribe();
     };
-  }, [hasOfflineData]);
+  }, [hasOfflineData, isOnline]);
 
   const initializeOfflineAuth = async () => {
     try {
       const storedToken = await getStoredToken();
 
-      if (storedToken && storedToken.type === 'pseudo') {
-        // Offline mode - restore pseudo-token user
-        const storedUser = await AsyncStorage.getItem('offline_user');
-        if (storedUser) {
-          const userData = JSON.parse(storedUser);
-          setUser(userData);
-          setAuthMode('offline');
-          setHasOfflineData(true);
+      if (storedToken) {
+        if (storedToken.type === 'pseudo') {
+          // Offline mode - restore pseudo-token user
+          const storedUser = await AsyncStorage.getItem('offline_user');
+          if (storedUser) {
+            const userData = JSON.parse(storedUser);
+            setUser(userData);
+            setAuthMode('offline');
+            setHasOfflineData(true);
+          }
+        } else if (storedToken.type === 'real' && !isOnline) {
+          // Offline mode with a real token
+          const storedUser = await AsyncStorage.getItem('online_user');
+          if (storedUser) {
+            const userData = JSON.parse(storedUser);
+            setUser(userData);
+            setAuthMode('offline');
+          }
         }
       }
     } catch (error) {

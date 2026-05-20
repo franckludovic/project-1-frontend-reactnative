@@ -8,6 +8,7 @@ type Props = TextInputProps & {
   label?: string;
   leftIcon?: string;
   rightIcon?: React.ReactNode;
+  containerStyle?: any;
 };
 
 const TextInput: React.FC<Props> = ({ 
@@ -19,12 +20,13 @@ const TextInput: React.FC<Props> = ({
   label, 
   leftIcon,
   rightIcon,
+  containerStyle,
   ...rest 
 }) => {
   const [focused, setFocused] = useState(false);
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, containerStyle]}>
       {label && <Text style={styles.label}>{label}</Text>}
       <View style={[
         styles.inputWrapper,
@@ -66,7 +68,8 @@ const TextInput: React.FC<Props> = ({
 
 const styles = StyleSheet.create({
   container: { 
-    marginBottom: 16,
+    marginBottom: 12,
+    width: '100%',
   },
   label: { 
     fontSize: 12, 
@@ -84,7 +87,8 @@ const styles = StyleSheet.create({
     borderRadius: SIZES.radius || 14,
     backgroundColor: '#F8FAFC',
     paddingHorizontal: 16,
-    height: 54,
+    height: 48,
+    width: '100%',
   },
   leftIcon: {
     marginRight: 12,
@@ -102,11 +106,6 @@ const styles = StyleSheet.create({
   inputFocused: { 
     borderColor: COLORS.primary, 
     backgroundColor: '#fff',
-    shadowColor: COLORS.primary,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    elevation: 2,
   },
   inputError: { 
     borderColor: COLORS.redAlert,

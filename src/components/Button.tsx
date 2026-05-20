@@ -11,22 +11,22 @@ type Props = {
   disabled?: boolean;
 };
 
-const Button: React.FC<Props> = ({ 
-  title, 
-  onPress, 
-  variant = 'primary', 
-  style, 
-  textStyle, 
-  disabled = false 
+const Button: React.FC<Props> = ({
+  title,
+  onPress,
+  variant = 'primary',
+  style,
+  textStyle,
+  disabled = false
 }) => {
   return (
-    <TouchableOpacity 
+    <TouchableOpacity
       style={[
-        styles.button, 
-        styles[variant], 
-        disabled && styles.disabled, 
+        styles.button,
+        styles[variant],
+        disabled && styles.disabled,
         style
-      ]} 
+      ]}
       onPress={onPress}
       activeOpacity={0.8}
       disabled={disabled}
@@ -37,11 +37,11 @@ const Button: React.FC<Props> = ({
 };
 
 const styles = StyleSheet.create({
-  button: { 
-    paddingVertical: 14, 
-    paddingHorizontal: 24, 
-    borderRadius: 14, 
-    alignItems: 'center', 
+  button: {
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    borderRadius: 14,
+    alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -54,42 +54,42 @@ const styles = StyleSheet.create({
     shadowOpacity: 0,
     elevation: 0,
   },
-  primary: { 
-    backgroundColor: COLORS.primary 
+  primary: {
+    backgroundColor: COLORS.primary
   },
-  primaryText: { 
-    color: '#fff', 
-    fontWeight: '700', 
+  primaryText: {
+    color: '#fff',
+    fontWeight: '700',
     fontSize: 15,
     letterSpacing: 0.3,
   },
-  secondary: { 
+  secondary: {
     backgroundColor: COLORS.primaryLight,
     shadowOpacity: 0,
     elevation: 0,
   },
-  secondaryText: { 
-    color: COLORS.primary, 
-    fontWeight: '700', 
+  secondaryText: {
+    color: COLORS.primary,
+    fontWeight: '700',
     fontSize: 15,
     letterSpacing: 0.3,
   },
-  outline: { 
-    borderWidth: 1.5, 
-    borderColor: COLORS.stone200, 
+  outline: {
+    borderWidth: 1.5,
+    borderColor: COLORS.stone200,
     backgroundColor: 'transparent',
     shadowOpacity: 0,
     elevation: 0,
   },
-  outlineText: { 
-    color: COLORS.textMain, 
-    fontWeight: '700', 
+  outlineText: {
+    color: COLORS.textMain,
+    fontWeight: '700',
     fontSize: 15,
     letterSpacing: 0.3,
   },
-  text: { 
-    fontSize: 15, 
-    fontWeight: '700' 
+  text: {
+    fontSize: 15,
+    fontWeight: '700'
   },
 });
 
