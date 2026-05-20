@@ -1,4 +1,4 @@
-import db from '../database/database';
+import db from '../../database/database';
 
 export interface Place {
   place_id?: number;

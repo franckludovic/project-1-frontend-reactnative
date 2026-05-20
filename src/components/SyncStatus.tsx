@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { COLORS } from '../constants';
 import { useAuth } from '../context/AuthContext';
-import { useNetworkState } from '../utils/networkUtils';
+import { Ionicons } from '@expo/vector-icons';
 
 type SyncState = 'idle' | 'syncing' | 'success' | 'error' | 'offline';
 
@@ -17,14 +17,13 @@ const SyncStatus: React.FC<Props> = ({ compact = false, showTrigger = true }) =>
   const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
   const [syncProgress, setSyncProgress] = useState<string>('');
 
-  // Determine current sync state
   useEffect(() => {
     if (!isOnline) {
       setSyncState('offline');
     } else if (authMode === 'offline' && hasOfflineData) {
-      setSyncState('idle'); // Ready to sync
+      setSyncState('idle'); 
     } else if (authMode === 'online' && !hasOfflineData) {
-      setSyncState('success'); // Synced
+      setSyncState('success'); 
     } else {
       setSyncState('idle');
     }
@@ -51,42 +50,47 @@ const SyncStatus: React.FC<Props> = ({ compact = false, showTrigger = true }) =>
     switch (syncState) {
       case 'offline':
         return {
-          icon: '📶',
-          label: 'Offline',
-          color: '#666',
-          backgroundColor: '#F5F5F5',
+          icon: 'cloud-offline',
+          label: 'Offline Mode',
+          color: COLORS.textMuted,
+          backgroundColor: '#F1F5F9', // gray-100
+          borderColor: 'rgba(148, 163, 184, 0.1)',
           showTrigger: false,
         };
       case 'syncing':
         return {
-          icon: '⏳',
-          label: syncProgress || 'Syncing...',
-          color: COLORS.orange,
-          backgroundColor: '#FFF8E1',
+          icon: 'sync',
+          label: syncProgress || 'Syncing data...',
+          color: COLORS.primary,
+          backgroundColor: COLORS.primaryLight,
+          borderColor: 'rgba(255, 90, 54, 0.1)',
           showTrigger: false,
         };
       case 'success':
         return {
-          icon: '✅',
-          label: lastSyncTime ? `Synced ${getTimeAgo(lastSyncTime)}` : 'Synced',
-          color: '#18A66B',
-          backgroundColor: '#F0F9F4',
+          icon: 'checkmark-circle',
+          label: lastSyncTime ? `Synced ${getTimeAgo(lastSyncTime)}` : 'Cloud Synced',
+          color: COLORS.emeraldGreen,
+          backgroundColor: COLORS.emeraldLight,
+          borderColor: 'rgba(16, 185, 129, 0.1)',
           showTrigger: hasOfflineData,
         };
       case 'error':
         return {
-          icon: '❌',
+          icon: 'alert-circle',
           label: 'Sync failed',
-          color: '#B00020',
-          backgroundColor: '#FFEBEE',
+          color: COLORS.redAlert,
+          backgroundColor: COLORS.redLight,
+          borderColor: 'rgba(239, 68, 68, 0.1)',
           showTrigger: true,
         };
-      default: // idle
+      default: 
         return {
-          icon: hasOfflineData ? '🔄' : '✅',
+          icon: hasOfflineData ? 'sync' : 'checkmark-circle',
           label: hasOfflineData ? 'Ready to sync' : 'Up to date',
-          color: hasOfflineData ? COLORS.orange : '#18A66B',
-          backgroundColor: hasOfflineData ? '#FFF8E1' : '#F0F9F4',
+          color: hasOfflineData ? COLORS.primary : COLORS.emeraldGreen,
+          backgroundColor: hasOfflineData ? COLORS.primaryLight : COLORS.emeraldLight,
+          borderColor: hasOfflineData ? 'rgba(255, 90, 54, 0.1)' : 'rgba(16, 185, 129, 0.1)',
           showTrigger: hasOfflineData,
         };
     }
@@ -110,13 +114,18 @@ const SyncStatus: React.FC<Props> = ({ compact = false, showTrigger = true }) =>
   if (compact) {
     return (
       <TouchableOpacity
-        style={[styles.compactContainer, { backgroundColor: config.backgroundColor }]}
+        style={[styles.compactContainer, { backgroundColor: config.backgroundColor, borderColor: config.borderColor }]}
         onPress={config.showTrigger && showTrigger ? handleManualSync : undefined}
         disabled={!config.showTrigger || !showTrigger}
+        activeOpacity={0.8}
       >
-        <Text style={[styles.compactIcon, { color: config.color }]}>
-          {syncState === 'syncing' ? <ActivityIndicator size="small" color={config.color} /> : config.icon}
-        </Text>
+        <View style={styles.compactIconContainer}>
+          {syncState === 'syncing' ? (
+            <ActivityIndicator size="small" color={config.color} />
+          ) : (
+            <Ionicons name={config.icon as any} size={14} color={config.color} />
+          )}
+        </View>
         <Text style={[styles.compactLabel, { color: config.color }]}>
           {config.label}
         </Text>
@@ -125,30 +134,33 @@ const SyncStatus: React.FC<Props> = ({ compact = false, showTrigger = true }) =>
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: config.backgroundColor }]}>
-      <View style={styles.iconContainer}>
-        {syncState === 'syncing' ? (
-          <ActivityIndicator size="small" color={config.color} />
-        ) : (
-          <Text style={[styles.icon, { color: config.color }]}>{config.icon}</Text>
-        )}
-      </View>
-      <View style={styles.textContainer}>
-        <Text style={[styles.label, { color: config.color }]}>{config.label}</Text>
-        {hasOfflineData && syncState !== 'syncing' && (
-          <Text style={styles.subLabel}>
-            {authMode === 'offline' ? 'Local changes pending' : 'Data to sync'}
-          </Text>
-        )}
+    <View style={[styles.container, { backgroundColor: config.backgroundColor, borderColor: config.borderColor }]}>
+      <View style={styles.leftSection}>
+        <View style={[styles.iconFrame, { backgroundColor: 'rgba(255, 255, 255, 0.7)' }]}>
+          {syncState === 'syncing' ? (
+            <ActivityIndicator size="small" color={config.color} />
+          ) : (
+            <Ionicons name={config.icon as any} size={18} color={config.color} />
+          )}
+        </View>
+        <View style={styles.textContainer}>
+          <Text style={[styles.label, { color: config.color }]}>{config.label}</Text>
+          {hasOfflineData && syncState !== 'syncing' && (
+            <Text style={styles.subLabel}>
+              {authMode === 'offline' ? 'Local changes pending' : 'Changes ready to sync'}
+            </Text>
+          )}
+        </View>
       </View>
       {config.showTrigger && showTrigger && (
         <TouchableOpacity
-          style={[styles.triggerButton, { borderColor: config.color }]}
+          style={[styles.triggerButton, { backgroundColor: config.color }]}
           onPress={handleManualSync}
           disabled={syncState === 'syncing'}
+          activeOpacity={0.85}
         >
-          <Text style={[styles.triggerText, { color: config.color }]}>
-            {syncState === 'error' ? 'Retry' : 'Sync'}
+          <Text style={styles.triggerText}>
+            {syncState === 'error' ? 'Retry' : 'Sync Now'}
           </Text>
         </TouchableOpacity>
       )}
@@ -160,37 +172,78 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    backgroundColor: '#F0F9F4',
-    borderRadius: 8,
-    marginHorizontal: 20,
-    marginBottom: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderRadius: 16,
+    borderWidth: 1,
+    marginHorizontal: 24,
+    marginBottom: 20,
     justifyContent: 'space-between',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.02,
+    shadowRadius: 6,
+    elevation: 1,
+  },
+  leftSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
   },
   compactContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
     marginHorizontal: 10,
   },
-  iconContainer: { marginRight: 10 },
-  icon: { fontSize: 16 },
-  compactIcon: { fontSize: 14, marginRight: 6 },
-  label: { fontSize: 13, fontWeight: '600', color: '#18A66B' },
-  compactLabel: { fontSize: 12, fontWeight: '500' },
-  textContainer: { flex: 1 },
-  subLabel: { fontSize: 11, color: '#666', marginTop: 2 },
-  triggerButton: {
-    borderWidth: 1,
-    borderRadius: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    marginLeft: 10,
+  iconFrame: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
   },
-  triggerText: { fontSize: 12, fontWeight: '600' },
+  compactIconContainer: { 
+    marginRight: 6 
+  },
+  label: { 
+    fontSize: 14, 
+    fontWeight: '800',
+    letterSpacing: -0.2,
+  },
+  compactLabel: { 
+    fontSize: 11, 
+    fontWeight: '700' 
+  },
+  textContainer: { 
+    flex: 1 
+  },
+  subLabel: { 
+    fontSize: 11, 
+    color: COLORS.textMuted, 
+    marginTop: 2,
+    fontWeight: '500',
+  },
+  triggerButton: {
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    marginLeft: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  triggerText: { 
+    fontSize: 12, 
+    fontWeight: '800',
+    color: '#fff',
+  },
 });
 
 export default SyncStatus;

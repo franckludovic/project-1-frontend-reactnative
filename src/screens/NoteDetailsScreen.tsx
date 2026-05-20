@@ -8,17 +8,15 @@ import {
   StatusBar,
   Alert,
   TouchableOpacity,
-  TextInput,
-  Modal,
 } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
-import { MaterialIcons } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
-import { getNoteById, updateNote, deleteNote, uploadImage, Note } from '../services/noteApi';
-import { getNoteById as getNoteByIdLocal, updateNote as updateNoteLocal, deleteNote as deleteNoteLocal } from '../services/noteService';
-import { API_BASE_URL } from '../config/config';
+import { getNoteById, updateNote, deleteNote, uploadImage, Note } from '../services/online/noteApi';
+import { getNoteById as getNoteByIdLocal, updateNote as updateNoteLocal, deleteNote as deleteNoteLocal } from '../services/local/noteService';
 import { useAuth } from '../context/AuthContext';
+import { COLORS } from '../constants';
 
 // Components
 import ImageCarousel from '../components/noteDetails/ImageCarousel';
@@ -36,7 +34,7 @@ const NoteDetailsScreen: React.FC = () => {
   const { user, tokens, authMode } = useAuth();
   const { noteId } = useLocalSearchParams<{ noteId: string }>();
 
-  const [note, setNote] = useState<Note | null>(null);
+  const [note, setNote] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   const [locationName, setLocationName] = useState<string>('Loading location...');
   const [isEditing, setIsEditing] = useState(false);
@@ -95,10 +93,8 @@ const NoteDetailsScreen: React.FC = () => {
       let noteData;
 
       if (authMode === 'offline') {
-        // Use local service for offline mode
         noteData = await getNoteByIdLocal(parseInt(noteId));
       } else {
-        // Use API service for online mode
         noteData = await getNoteById(parseInt(noteId), tokens?.accessToken || '');
       }
 
@@ -123,7 +119,11 @@ const NoteDetailsScreen: React.FC = () => {
 
     setIsUpdating(true);
     try {
-      await updateNote(note.note_id, { content: editedContent }, tokens?.accessToken || '');
+      if (authMode === 'offline') {
+        await updateNoteLocal(note.note_id, { content: editedContent });
+      } else {
+        await updateNote(note.note_id, { content: editedContent }, tokens?.accessToken || '');
+      }
       setNote({ ...note, content: editedContent });
       setIsEditing(false);
       Alert.alert('Success', 'Note updated successfully');
@@ -162,16 +162,16 @@ const NoteDetailsScreen: React.FC = () => {
         } as any);
 
         try {
-          // First upload the image
-          const uploadResponse = await uploadImage(formData, tokens?.accessToken || '');
-
-          if (!uploadResponse.success) {
-            throw new Error('Failed to upload image');
+          let imageUrl = selectedImage.uri;
+          
+          if (authMode !== 'offline') {
+            const uploadResponse = await uploadImage(formData, tokens?.accessToken || '');
+            if (!uploadResponse.success) {
+              throw new Error('Failed to upload image');
+            }
+            imageUrl = uploadResponse.imageUrl;
           }
 
-          const imageUrl = uploadResponse.imageUrl;
-
-          // Then update the note with the new image
           const updatedPhotos = [
             ...(note?.photos || []),
             {
@@ -181,15 +181,19 @@ const NoteDetailsScreen: React.FC = () => {
             },
           ];
 
-          await updateNote(parseInt(noteId), {
-            photos: updatedPhotos,
-          }, tokens?.accessToken || '');
+          if (authMode === 'offline') {
+            // update locally
+            await updateNoteLocal(parseInt(noteId), { content: note?.content });
+          } else {
+            await updateNote(parseInt(noteId), {
+              photos: updatedPhotos,
+            }, tokens?.accessToken || '');
+          }
 
-          // Update local state
           setNote({
             ...note!,
             photos: updatedPhotos.map((photo, index) => ({
-              photo_id: Date.now() + index, // Temporary ID
+              photo_id: Date.now() + index,
               ...photo,
             })),
           });
@@ -214,12 +218,14 @@ const NoteDetailsScreen: React.FC = () => {
     setIsDeletingImages(true);
     try {
       const updatedPhotos = note?.photos?.filter(
-        (photo) => !selectedImages.has(photo.photo_id)
+        (photo: any) => !selectedImages.has(photo.photo_id)
       ) || [];
 
-      await updateNote(parseInt(noteId), {
-        photos: updatedPhotos,
-      }, tokens?.accessToken || '');
+      if (authMode !== 'offline') {
+        await updateNote(parseInt(noteId), {
+          photos: updatedPhotos,
+        }, tokens?.accessToken || '');
+      }
 
       setNote({
         ...note!,
@@ -248,7 +254,11 @@ const NoteDetailsScreen: React.FC = () => {
           style: 'destructive',
           onPress: async () => {
             try {
-              await deleteNote(parseInt(noteId), tokens?.accessToken || '');
+              if (authMode === 'offline') {
+                await deleteNoteLocal(parseInt(noteId));
+              } else {
+                await deleteNote(parseInt(noteId), tokens?.accessToken || '');
+              }
               Alert.alert('Success', 'Note deleted successfully');
               router.back();
             } catch (error) {
@@ -261,18 +271,28 @@ const NoteDetailsScreen: React.FC = () => {
     );
   };
 
+  const renderHeaderLeft = () => (
+    <TouchableOpacity onPress={() => router.back()} activeOpacity={0.7}>
+      <Ionicons name="arrow-back" size={24} color={COLORS.textMain} />
+    </TouchableOpacity>
+  );
+
+  const renderHeaderRight = () => (
+    <TouchableOpacity onPress={() => setShowMenu(true)} activeOpacity={0.7}>
+      <Ionicons name="ellipsis-vertical" size={22} color={COLORS.textMain} />
+    </TouchableOpacity>
+  );
+
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
-        <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
+        <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
         <Header
-          leftContent={<TouchableOpacity onPress={() => router.back()}>
-            <MaterialIcons name="arrow-back" size={24} color="#0f172a" />
-          </TouchableOpacity>}
-          centerContent={<Text style={{ fontSize: 18, fontWeight: '600', color: '#0f172a' }}>Note Details</Text>}
+          leftContent={renderHeaderLeft()}
+          centerContent={<Text style={styles.headerTitle}>Note Details</Text>}
         />
         <View style={styles.loadingContainer}>
-          <Text>Loading...</Text>
+          <Text style={styles.loadingText}>Loading...</Text>
         </View>
       </SafeAreaView>
     );
@@ -281,15 +301,13 @@ const NoteDetailsScreen: React.FC = () => {
   if (!note) {
     return (
       <SafeAreaView style={styles.container}>
-        <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
+        <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
         <Header
-          leftContent={<TouchableOpacity onPress={() => router.back()}>
-            <MaterialIcons name="arrow-back" size={24} color="#0f172a" />
-          </TouchableOpacity>}
-          centerContent={<Text style={{ fontSize: 18, fontWeight: '600', color: '#0f172a' }}>Note Details</Text>}
+          leftContent={renderHeaderLeft()}
+          centerContent={<Text style={styles.headerTitle}>Note Details</Text>}
         />
         <View style={styles.errorContainer}>
-          <Text>Note not found</Text>
+          <Text style={styles.errorText}>Note not found</Text>
         </View>
       </SafeAreaView>
     );
@@ -297,15 +315,11 @@ const NoteDetailsScreen: React.FC = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
+      <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
       <Header
-        leftContent={<TouchableOpacity onPress={() => router.back()}>
-          <MaterialIcons name="arrow-back" size={24} color="#0f172a" />
-        </TouchableOpacity>}
-        centerContent={<Text style={{ fontSize: 18, fontWeight: '600', color: '#0f172a' }}>Note Details</Text>}
-        rightContent={<TouchableOpacity onPress={() => setShowMenu(true)}>
-          <MaterialIcons name="more-vert" size={24} color="#0f172a" />
-        </TouchableOpacity>}
+        leftContent={renderHeaderLeft()}
+        centerContent={<Text style={styles.headerTitle}>Note Details</Text>}
+        rightContent={renderHeaderRight()}
       />
 
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
@@ -391,31 +405,46 @@ const NoteDetailsScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#ffffff',
-    marginTop: StatusBar.currentHeight || 0,
+    backgroundColor: COLORS.background,
   },
   scrollView: {
     flex: 1,
   },
   scrollContent: {
-    paddingBottom: 20,
+    paddingBottom: 40,
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: COLORS.textMain,
+    letterSpacing: -0.3,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
+  loadingText: {
+    fontSize: 14,
+    color: COLORS.textMuted,
+    fontWeight: '600',
+  },
   errorContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
+  errorText: {
+    fontSize: 14,
+    color: COLORS.textMuted,
+    fontWeight: '600',
+  },
   actionButtons: {
-    paddingHorizontal: 15,
-    paddingVertical: 10,
+    paddingHorizontal: 24,
+    paddingVertical: 16,
   },
   editButton: {
-    marginBottom: 10,
+    width: '100%',
   },
   loadingOverlay: {
     position: 'absolute',
@@ -423,19 +452,21 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(15, 23, 42, 0.7)',
     justifyContent: 'center',
     alignItems: 'center',
+    zIndex: 999,
   },
   loadingBox: {
     backgroundColor: '#ffffff',
-    padding: 20,
-    borderRadius: 8,
+    padding: 24,
+    borderRadius: 16,
     alignItems: 'center',
-  },
-  loadingText: {
-    fontSize: 16,
-    color: '#0f172a',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 5,
   },
 });
 

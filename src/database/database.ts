@@ -14,12 +14,24 @@ export const initDb = () => {
       firebase_uid TEXT,
       full_name TEXT NOT NULL,
       email TEXT UNIQUE NOT NULL,
+      username TEXT UNIQUE,
       role TEXT DEFAULT 'user',
       password_hash TEXT,
       created_at TEXT,
       updated_at TEXT
     );
   `);
+
+  try {
+    const userInfo = db.getAllSync("PRAGMA table_info(users)");
+    const hasUsername = userInfo.some((col: any) => col.name === 'username');
+    if (!hasUsername) {
+      console.log("Adding username column to local SQLite users table...");
+      db.execSync("ALTER TABLE users ADD COLUMN username TEXT;");
+    }
+  } catch (error) {
+    console.log("Error checking/altering users table:", error);
+  }
 
   // Places - Drop and recreate if schema changed
   try {

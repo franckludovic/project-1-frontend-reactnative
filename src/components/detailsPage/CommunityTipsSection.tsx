@@ -4,47 +4,29 @@ import {
   Text,
   StyleSheet,
 } from 'react-native';
-
-// Colors extracted from the HTML Tailwind Config
-const COLORS = {
-  primary: '#fb923c',
-  primaryDark: '#ea580c',
-  backgroundLight: '#fafaf9',
-  surfaceLight: '#ffffff',
-  surfaceDark: '#292524',
-  stone900: '#1c1917',
-  stone600: '#57534e',
-  stone400: '#a8a29e',
-  stone200: '#e7e5e4',
-  amber50: '#fffbeb',
-  amber100: '#fef3c7',
-  amber600: '#d97706',
-  emerald50: '#ecfdf5',
-  emerald100: '#d1fae5',
-  emerald500: '#10b981',
-  emerald600: '#059669',
-  emerald700: '#047857',
-};
+import { Ionicons } from '@expo/vector-icons';
+import { COLORS } from '../../constants';
 
 const CommunityTipsSection: React.FC = () => {
   return (
     <>
-      {/* --- COMMUNITY TIPS --- */}
       <View style={styles.sectionHeaderRow}>
         <Text style={styles.sectionTitleLarge}>Community Tips</Text>
-        <Text style={styles.newTipsText}>12 new</Text>
+        <Text style={styles.newTipsText}>0 new</Text>
       </View>
 
       <View style={styles.tipsContainer}>
-        {/* Tip 1 */}
         <View style={styles.tipCard}>
-          <View style={{ flex: 1 }}>
+          <View style={styles.avatarPlaceholder}>
+            <Ionicons name="people-outline" size={16} color={COLORS.textLight} />
+          </View>
+          <View style={styles.tipContent}>
             <View style={styles.tipHeader}>
               <Text style={styles.tipName}>mamami</Text>
               <Text style={styles.tipTime}>N/A</Text>
             </View>
             <Text style={styles.tipText}>
-              None for now
+              No community tips logged yet. Be the first to add a tip when synced online!
             </Text>
           </View>
         </View>
@@ -59,17 +41,18 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 24,
-    marginBottom: 16,
+    marginBottom: 14,
   },
   sectionTitleLarge: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: COLORS.stone900,
+    fontSize: 16,
+    fontWeight: '800',
+    color: COLORS.textMain,
+    letterSpacing: -0.3,
   },
   newTipsText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: COLORS.stone400,
+    fontSize: 11,
+    fontWeight: '800',
+    color: COLORS.textLight,
   },
   tipsContainer: {
     paddingHorizontal: 24,
@@ -77,12 +60,26 @@ const styles = StyleSheet.create({
   },
   tipCard: {
     flexDirection: 'row',
-    padding: 12,
+    padding: 14,
     backgroundColor: COLORS.surfaceLight,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: COLORS.stone200,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: COLORS.borderLight,
     gap: 12,
+    alignItems: 'flex-start',
+  },
+  avatarPlaceholder: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: '#F8FAFC',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  tipContent: {
+    flex: 1,
   },
   tipHeader: {
     flexDirection: 'row',
@@ -92,17 +89,19 @@ const styles = StyleSheet.create({
   },
   tipName: {
     fontSize: 12,
-    fontWeight: 'bold',
-    color: COLORS.stone900,
+    fontWeight: '800',
+    color: COLORS.textMain,
   },
   tipTime: {
     fontSize: 10,
-    color: COLORS.stone400,
+    color: COLORS.textLight,
+    fontWeight: '600',
   },
   tipText: {
     fontSize: 12,
-    color: COLORS.stone600,
+    color: COLORS.textMuted,
     lineHeight: 18,
+    fontWeight: '500',
   },
 });
 

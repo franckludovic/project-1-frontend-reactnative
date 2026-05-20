@@ -4,11 +4,11 @@ import {
   TouchableOpacity, ScrollView, Image, Alert, Dimensions, FlatList
 } from 'react-native';
 import { useLocalSearchParams, useNavigation } from 'expo-router';
-import Icon from 'react-native-vector-icons/FontAwesome';
+import Icon from '@expo/vector-icons/FontAwesome';
 import { COLORS } from '../constants';
 import { useAuth } from '../context/AuthContext';
-import { createPlace } from '../services/placeService';
-import { addPlacePhoto } from '../services/photoService';
+import { createPlace } from '../services/local/placeService';
+import { addPlacePhoto } from '../services/local/photoService';
 import ImagePickerModal from '../components/ImagePickerModal';
 
 const { width } = Dimensions.get('window');

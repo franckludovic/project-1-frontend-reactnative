@@ -1,4 +1,4 @@
-import db from '../database/database';
+import db from '../../database/database';
 
 export interface Note {
   note_id?: number;
@@ -13,18 +13,28 @@ export interface Note {
   updated_at?: string;
 }
 
+
 export const createNote = (note: Note): Promise<number> => {
-  return new Promise((resolve, reject) => {
-    db.transaction((tx: any) => {
-      tx.executeSql(
-        `INSERT INTO notes (user_id, place_id, title, content, latitude, longitude, synched, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [note.user_id, note.place_id, note.title, note.content, note.latitude, note.longitude, note.synched || 0, note.created_at, note.updated_at],
-        (_: any, result: any) => resolve(result.insertId),
-        (_: any, error: any) => reject(error)
-      );
-    });
-  });
-};
+  try {
+    const result = db.runSync(
+      `INSERT INTO notes (user_id, place_id, title, content, latitude, longitude, synched, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        note.user_id,
+        note.place_id,
+        note.title || null,
+        note.content || null,
+        note.latitude || null,
+        note.longitude || null,
+        note.synched || 0,
+        note.created_at || new Date().toISOString(),
+        note.updated_at || new Date().toISOString()
+      ]
+    );
+    return Promise.resolve(result.lastInsertRowId);
+  } catch (error) {
+    return Promise.reject(error);
+  }
+}
 
 export const getNotesByUserId = (userId: number): Promise<Note[]> => {
   try {
@@ -45,6 +55,18 @@ export const getNotesByPlaceId = (placeId: number): Promise<Note[]> => {
       [placeId]
     );
     return Promise.resolve(notes);
+  } catch (error) {
+    return Promise.reject(error);
+  }
+};
+
+export const getNoteById = (noteId: number): Promise<Note | null> => {
+  try {
+    const note = db.getFirstSync<Note>(
+      `SELECT * FROM notes WHERE note_id = ?`,
+      [noteId]
+    );
+    return Promise.resolve(note || null);
   } catch (error) {
     return Promise.reject(error);
   }

@@ -1,52 +1,35 @@
-import React, { useState, useRef, useEffect } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  SafeAreaView,
-  ImageBackground,
-  TouchableOpacity,
-  Dimensions,
-  Alert,
-  Animated,
-  PanResponder,
-  ActivityIndicator,
-  RefreshControl,
-} from "react-native";
-import { router } from "expo-router";
-import Icon from "react-native-vector-icons/FontAwesome";
-import * as ImagePicker from "expo-image-picker";
-import * as Location from "expo-location";
-import { COLORS } from "../constants";
-import { useAuth } from "../context/AuthContext";
-import { get } from "../services/api";
-import { addFavorite as addFavoriteApi, removeFavorite as removeFavoriteApi, getFavorites as getFavoritesApi } from "../services/favoriteApi";
-import { addFavorite, removeFavorite, getFavoritesByUserId, isFavorite } from "../services/favoriteService";
-import PlaceCard from "../components/PlaceCard";
-import Grid from "../components/Grid";
-import ImagePickerModal from "../components/ImagePickerModal";
-import { STATIC_BASE_URL } from "../config/config";
-import { getAllPlaces, getPlacesByUserId } from "../services/placeService";
-import { getPlacePhotos } from "../services/photoService";
-import { getCurrentLocation, reverseGeocode } from "../utils/locationUtils";
-import { takePicture } from "../utils/cameraUtils";
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, Dimensions, SafeAreaView, TouchableOpacity, ActivityIndicator, RefreshControl, Alert } from 'react-native';
+import { router } from 'expo-router';
+import { COLORS } from '../constants';
+import { useAuth } from '../context/AuthContext';
+import { addFavorite, removeFavorite, getFavoritesByUserId, isFavorite } from '../services/local/favoriteService';
+import PlaceCard from '../components/PlaceCard';
+import Grid from '../components/Grid';
+import Header from '../components/Header';
+import { STATIC_BASE_URL } from '../config/config';
+import { getPlacesByUserId } from '../services/local/placeService';
+import { getPlacePhotos } from '../services/local/photoService';
+import { reverseGeocode, getCurrentLocation } from '../utils/locationUtils';
+import ImagePickerModal from '../components/ImagePickerModal';
+import { Ionicons } from '@expo/vector-icons';
+import MapView, { Marker, UrlTile } from 'react-native-maps';
 
-const { height } = Dimensions.get("window");
+type ViewMode = 'grid' | 'map';
 
 const PlacesScreen: React.FC = () => {
-  const { tokens, user } = useAuth();
+  const { user } = useAuth();
   const userID = typeof user === "string" ? null : user?.user_id ?? null;
 
-
-  const [activeTab, setActiveTab] = useState("Viewed");
-  const [savedPlaces, setSavedPlaces] = useState<any[]>([]);
-  const [recentlyViewed, setRecentlyViewed] = useState<any[]>([]);
+  const [activeTab, setActiveTab] = useState("Captured");
+  const [viewMode, setViewMode] = useState<ViewMode>('grid');
+  const [places, setPlaces] = useState<any[]>([]);
   const [nearbyPlaces, setNearbyPlaces] = useState<any[]>([]);
   const [plannedVisits, setPlannedVisits] = useState<any[]>([]);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [refreshKey, setRefreshKey] = useState(0);
-  const [isImagePickerVisible, setIsImagePickerVisible] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [isImagePickerVisible, setIsImagePickerVisible] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
 
   const handleFavoriteToggle = async (placeId: string, isCurrentlyFavorite: boolean) => {
     if (!userID) {
@@ -56,31 +39,23 @@ const PlacesScreen: React.FC = () => {
 
     try {
       if (isCurrentlyFavorite) {
-        // Remove favorite - get local favorites and find the one to remove
         const favArray = await getFavoritesByUserId(userID as number);
         const favorite = favArray.find((f: any) => f.place_id === parseInt(placeId));
-        if (favorite) {
+        if (favorite && favorite.fav_id) {
           await removeFavorite(favorite.fav_id);
         }
-
-        // Update Saved Places (remove from list)
-        setSavedPlaces(prev => prev.filter(item => item.id !== placeId));
       } else {
-        // Add favorite
         await addFavorite({ user_id: userID as number, place_id: parseInt(placeId) });
       }
 
-      // Update Recently Viewed (optimistic toggle)
-      setRecentlyViewed(prev =>
+      setPlaces(prev =>
         prev.map(item =>
           item.id === placeId ? { ...item, isFavorite: !isCurrentlyFavorite } : item
         )
       );
     } catch (error: any) {
       Alert.alert('Error', error.message || 'Failed to update favorite.');
-
-      // Revert optimistic update on error
-      setRecentlyViewed(prev =>
+      setPlaces(prev =>
         prev.map(item =>
           item.id === placeId ? { ...item, isFavorite: isCurrentlyFavorite } : item
         )
@@ -88,147 +63,57 @@ const PlacesScreen: React.FC = () => {
     }
   };
 
-
-  /* Bottom sheet */
-  const [bottomSheetTopValue, setBottomSheetTopValue] = useState(height * 0.15);
-  const bottomSheetTop = useRef(new Animated.Value(height * 0.15)).current;
-  const mapHeight = useRef(new Animated.Value(height * 0.15)).current;
-
-  /* Reverse geocode */
-  const getReadableLocation = async (lat: number, lng: number) => {
-    try {
-      const res = await Location.reverseGeocodeAsync({
-        latitude: lat,
-        longitude: lng,
-      });
-      if (!res.length) return "Unknown location";
-
-      const p = res[0];
-      return `${p.city || p.region || "Unknown"}, ${p.country || ""}`;
-    } catch {
-      return "Unknown location";
-    }
-  };
-
-  /* Fetch data */
-  useEffect(() => {
+  const fetchData = async () => {
     if (!userID) return;
 
-    const fetchData = async () => {
-      try {
-        // Get places by user ID using the service method
-        const placesArray = await getPlacesByUserId(userID);
-
-        const enriched = await Promise.all(
-          placesArray.slice(0, 10).map(async (item: any) => {
-            const reverseResult = await reverseGeocode(item.latitude, item.longitude);
-
-            // Get place photos and use the first one (display_order 0) as the main image
-            let image_url = "https://picsum.photos/400"; // default fallback
-            try {
-              const photos = await getPlacePhotos(item.place_id);
-              if (photos.length > 0) {
-                // Find the photo with display_order 0 (primary image)
-                const primaryPhoto = photos.find(photo => photo.display_order === 0) || photos[0];
-                if (primaryPhoto.photo_url) {
-                  image_url = primaryPhoto.photo_url.startsWith("http") || primaryPhoto.photo_url.startsWith("file://")
-                    ? primaryPhoto.photo_url
-                    : `${STATIC_BASE_URL}${primaryPhoto.photo_url}`;
-                }
-              }
-            } catch (photoError) {
-              console.log("Error fetching photos for place", item.place_id, photoError);
-              // Keep default image_url
-            }
-
-            return {
-              id: String(item.place_id),
-              place_id: item.place_id,
-              title: item.title,
-              location: reverseResult.success ? reverseResult.readableName : `${item.latitude.toFixed(4)}, ${item.longitude.toFixed(4)}`,
-              rating: item.rating ?? 4.5,
-              isFavorite: item.is_favorite === 1,
-              image_url: image_url,
-              latitude: item.latitude,
-              longitude: item.longitude,
-              timestamp: item.created_at || new Date().toISOString(),
-            };
-          })
-        );
-
-        setRecentlyViewed(enriched);
-
-      } catch (err: any) {
-        console.log("Fetch error:", err?.message || err);
-        Alert.alert('Error', 'Failed to load places');
-      }
-    };
-
-    fetchData();
-  }, [userID]);
-
-  /* Bottom sheet drag */
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onPanResponderMove: (_, g) => {
-        const newTop = bottomSheetTopValue + g.dy;
-        const clamped = Math.max(80, Math.min(newTop, height - 80));
-        bottomSheetTop.setValue(clamped);
-        mapHeight.setValue(clamped);
-      },
-      onPanResponderRelease: (_, g) => {
-        const newTop = bottomSheetTopValue + g.dy;
-        const target = newTop < height / 2 ? height * 0.15 : height - 80;
-        setBottomSheetTopValue(target);
-
-        Animated.spring(bottomSheetTop, {
-          toValue: target,
-          useNativeDriver: false,
-        }).start();
-        Animated.spring(mapHeight, {
-          toValue: target,
-          useNativeDriver: false,
-        }).start();
-      },
-    })
-  ).current;
-
-  /* Camera */
-  const openCamera = () => {
-    setIsImagePickerVisible(true);
-  };
-
-  const handleImageSelected = async (uri: string) => {
     try {
-      setIsProcessing(true);
+      const placesArray = await getPlacesByUserId(userID);
 
-      const locPerm = await Location.requestForegroundPermissionsAsync();
-      if (locPerm.status !== "granted") {
-        Alert.alert("Permission required", "Location permission is required");
-        return;
-      }
+      const enriched = await Promise.all(
+        placesArray.map(async (item: any) => {
+          const reverseResult = await reverseGeocode(item.latitude, item.longitude);
+          const isFavorited = await isFavorite(userID, item.place_id);
 
-      const location =
-        (await Location.getLastKnownPositionAsync()) ||
-        (await Location.getCurrentPositionAsync({}));
+          let image_url = "https://picsum.photos/400";
+          try {
+            const photos = await getPlacePhotos(item.place_id);
+            if (photos.length > 0) {
+              const primaryPhoto = photos.find((photo: any) => photo.display_order === 0) || photos[0];
+              if (primaryPhoto.photo_url) {
+                image_url = primaryPhoto.photo_url.startsWith("http") || primaryPhoto.photo_url.startsWith("file://")
+                  ? primaryPhoto.photo_url
+                  : `${STATIC_BASE_URL}${primaryPhoto.photo_url}`;
+              }
+            }
+          } catch (photoError) {
+            console.log("Error fetching photos for place", item.place_id, photoError);
+          }
 
-      router.push({
-        pathname: "/CreatePlace",
-        params: {
-          imageUri: uri,
-          latitude: location.coords.latitude.toString(),
-          longitude: location.coords.longitude.toString(),
-          timestamp: new Date().toISOString(),
-        },
-      });
+          return {
+            id: String(item.place_id),
+            place_id: item.place_id,
+            title: item.title,
+            location: reverseResult.success ? reverseResult.readableName : `${item.latitude.toFixed(4)}, ${item.longitude.toFixed(4)}`,
+            rating: item.rating ?? 4.5,
+            isFavorite: isFavorited,
+            image_url: image_url,
+            latitude: item.latitude,
+            longitude: item.longitude,
+            timestamp: item.created_at || new Date().toISOString(),
+          };
+        })
+      );
 
-    } catch {
-      Alert.alert("Error", "Something went wrong");
-    } finally {
-      setIsProcessing(false);
+      setPlaces(enriched);
+    } catch (err: any) {
+      console.log("Fetch error:", err?.message || err);
+      Alert.alert('Error', 'Failed to load places');
     }
   };
+
+  useEffect(() => {
+    fetchData().finally(() => setLoading(false));
+  }, [userID]);
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -236,113 +121,195 @@ const PlacesScreen: React.FC = () => {
     setRefreshing(false);
   };
 
-  const tabs = ["Viewed", "Nearby", "Planned Visit"];
+  const handleToggleViewMode = () => {
+    setViewMode(prev => prev === 'grid' ? 'map' : 'grid');
+  };
+
+  const handleAddPlace = () => {
+    setIsImagePickerVisible(true);
+  };
+
+  const handleImageSelected = async (uri: string | string[]) => {
+    try {
+      setIsProcessing(true);
+      const location = await getCurrentLocation();
+
+      if (!location) {
+        Alert.alert("Error", "Unable to get current location");
+        return;
+      }
+
+      router.push({
+        pathname: "/CreatePlace",
+        params: {
+          imageUri: Array.isArray(uri) ? uri[0] : uri,
+          latitude: location.latitude.toString(),
+          longitude: location.longitude.toString(),
+          timestamp: new Date().toISOString(),
+        },
+      });
+    } catch (error) {
+      Alert.alert("Error", "Something went wrong");
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <Header centerContent={<Text style={styles.headerTitle}>My Places</Text>} />
+        <View style={styles.center}>
+          <ActivityIndicator size="large" color={COLORS.primary} />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  const tabs = ["Captured", "Nearby", "Planned"];
+
+  const getCurrentData = () => {
+    switch (activeTab) {
+      case "Captured":
+        return places;
+      case "Nearby":
+        return nearbyPlaces;
+      case "Planned":
+        return plannedVisits;
+      default:
+        return places;
+      }
+  };
+
+  const getEmptyMessage = () => {
+    switch (activeTab) {
+      case "Captured":
+        return { title: "No places captured yet", subtitle: "Tap the + button to journal your first destination" };
+      case "Nearby":
+        return { title: "No nearby places", subtitle: "Explored pins close to your location will show here" };
+      case "Planned":
+        return { title: "No planned visits", subtitle: "Queue up locations you want to check off next" };
+      default:
+        return { title: "No places yet", subtitle: "Start exploring to save your first memory" };
+    }
+  };
+
+  const defaultCoords = {
+    latitude: places[0]?.latitude || 6.1319,
+    longitude: places[0]?.longitude || 1.2222,
+    latitudeDelta: 10.0,
+    longitudeDelta: 10.0,
+  };
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Map */}
-      <Animated.Image
-        source={require("../assets/images/image 13 map.png")}
-        style={[styles.mapImage, { height: mapHeight }]}
-        resizeMode="cover"
-      />
+      <Header centerContent={<Text style={styles.headerTitle}>My Places</Text>} />
 
-      {/* Bottom sheet */}
-      <Animated.View style={[styles.bottomSheet, { top: bottomSheetTop }]}>
-        <View style={styles.handle} {...panResponder.panHandlers} />
+      {/* Tabs */}
+      <View style={styles.tabs}>
+        {tabs.map((tab) => (
+          <TouchableOpacity
+            key={tab}
+            style={[styles.tab, activeTab === tab && styles.activeTab]}
+            onPress={() => setActiveTab(tab)}
+            activeOpacity={0.8}
+          >
+            <Text style={[styles.tabText, activeTab === tab && styles.activeTabText]}>
+              {tab}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
 
-        {/* Tabs */}
-        <View style={styles.tabs}>
-          {tabs.map((tab) => (
-            <TouchableOpacity
-              key={tab}
-              style={[styles.tab, activeTab === tab && styles.activeTab]}
-              onPress={() => setActiveTab(tab)}
-            >
-              <Text
-                style={[
-                  styles.tabText,
-                  activeTab === tab && styles.activeTabText,
-                ]}
-              >
-                {tab}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-
-        <View style={styles.contentScroll}>
-          {activeTab === "Viewed" && (
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Recently Viewed</Text>
-              <Grid
-                data={recentlyViewed}
-                renderItem={({ item }) => {
-                  // 👇 Debug log
-                  console.log("Image URL:", item.image_url);
-
-                  return (
-                    <View style={styles.gridItem}>
-                      <PlaceCard
-                        title={item.title}
-                        location={item.location}
-                        imageUrl={item.image_url}
-                        onPress={() =>
-                          router.push({
-                            pathname: "/place/[placeId]",
-                            params: { placeId: String(item.place_id) },
-                          })
-                        }
-                        onFavoritePress={() => handleFavoriteToggle(item.id, item.isFavorite)}
-                        isFavorite={item.isFavorite}
-                        placeId={item.place_id}
-                      />
-                    </View>
-                  );
-                }}
-                keyExtractor={(item) => item.id}
-                numColumns={2}
-                contentContainerStyle={styles.gridContainer}
-                refreshControl={
-                  <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+      {viewMode === 'grid' ? (
+        <Grid
+          data={getCurrentData()}
+          renderItem={({ item }) => (
+            <View style={styles.gridItem}>
+              <PlaceCard
+                title={item.title}
+                location={item.location}
+                imageUrl={item.image_url}
+                onPress={() =>
+                  router.push({
+                    pathname: "/place/[placeId]",
+                    params: { placeId: String(item.place_id) },
+                  })
                 }
+                onFavoritePress={() => handleFavoriteToggle(item.id, item.isFavorite)}
+                isFavorite={item.isFavorite}
+                placeId={item.place_id}
               />
-
             </View>
           )}
-
-          {activeTab === "Nearby" && (
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Nearby Places</Text>
-              <View style={styles.emptyContainer}>
-                <Text style={styles.emptyText}>No nearby places available yet.</Text>
+          keyExtractor={(item) => item.id}
+          numColumns={2}
+          contentContainerStyle={[styles.gridContainer, { paddingBottom: 120 }]}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.primary} />
+          }
+          ListEmptyComponent={
+            <View style={styles.emptyContainer}>
+              <View style={styles.emptyIconFrame}>
+                <Ionicons name="compass-outline" size={40} color={COLORS.textLight} />
               </View>
+              <Text style={styles.emptyText}>{getEmptyMessage().title}</Text>
+              <Text style={styles.emptySubtext}>{getEmptyMessage().subtitle}</Text>
             </View>
-          )}
-
-          {activeTab === "Planned Visit" && (
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Planned Visits</Text>
-              <View style={styles.emptyContainer}>
-                <Text style={styles.emptyText}>No planned visits yet.</Text>
-              </View>
-            </View>
-          )}
-        </View>
-      </Animated.View>
-
-      {/* Camera */}
-      <TouchableOpacity style={styles.cameraButton} onPress={openCamera}>
-        <Icon name="camera" size={24} color="#fff" />
-      </TouchableOpacity>
-
-      {/* Loader */}
-      {isProcessing && (
-        <View style={styles.loaderOverlay}>
-          <ActivityIndicator size="large" color="#fff" />
-          <Text style={styles.loaderText}>Preparing place…</Text>
+          }
+        />
+      ) : (
+        <View style={styles.mapContainer}>
+          <MapView
+            style={StyleSheet.absoluteFillObject}
+            initialRegion={defaultCoords}
+            mapType="none" // disables default Google/Apple mapping vectors to enforce OSM tiles
+          >
+            <UrlTile
+              urlTemplate="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+              maximumZ={19}
+              flipY={false}
+            />
+            {getCurrentData().map((item: any) => (
+              <Marker
+                key={item.id}
+                coordinate={{ latitude: item.latitude, longitude: item.longitude }}
+                title={item.title}
+                description={item.location}
+                pinColor={COLORS.primary}
+                onCalloutPress={() => {
+                  router.push({
+                    pathname: "/place/[placeId]",
+                    params: { placeId: String(item.place_id) },
+                  });
+                }}
+              />
+            ))}
+          </MapView>
         </View>
       )}
+
+      {/* Floating Action Buttons */}
+      <View style={styles.floatingButtonsContainer}>
+        <TouchableOpacity 
+          style={[styles.floatingButton, styles.mapToggleBtn]} 
+          onPress={handleToggleViewMode}
+          activeOpacity={0.85}
+        >
+          <Ionicons 
+            name={viewMode === 'grid' ? 'map' : 'list'} 
+            size={22} 
+            color="#fff" 
+          />
+        </TouchableOpacity>
+        <TouchableOpacity 
+          style={styles.floatingButton} 
+          onPress={handleAddPlace}
+          activeOpacity={0.85}
+        >
+          <Ionicons name="add" size={26} color="#fff" />
+        </TouchableOpacity>
+      </View>
 
       {/* Image Picker Modal */}
       <ImagePickerModal
@@ -350,6 +317,14 @@ const PlacesScreen: React.FC = () => {
         onClose={() => setIsImagePickerVisible(false)}
         onImageSelected={handleImageSelected}
       />
+
+      {/* Loader Overlay */}
+      {isProcessing && (
+        <View style={styles.loaderOverlay}>
+          <ActivityIndicator size="large" color="#fff" />
+          <Text style={styles.loaderText}>Fetching location details…</Text>
+        </View>
+      )}
     </SafeAreaView>
   );
 };
@@ -357,250 +332,134 @@ const PlacesScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f5f5f5",
+    backgroundColor: COLORS.background,
   },
-  selectedCard: {
-    borderWidth: 2,
-    borderColor: COLORS.primary,
-    transform: [{ scale: 1.03 }],
-  },
-  bottomSheet: {
-    position: "absolute",
-    top: height * 0.15,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: "#fff",
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 5,
-  },
-  handle: {
-    width: 40,
-    height: 4,
-    backgroundColor: "#ddd",
-    borderRadius: 2,
-    alignSelf: "center",
-    marginTop: 8,
-    marginBottom: 16,
-  },
-  mapImage: {
-    width: "100%",
-    height: 120,
-    marginBottom: 16,
-  },
-  tabs: {
-    flexDirection: "row",
-    paddingHorizontal: 20,
-    marginBottom: 16,
-  },
-  tab: {
-    flex: 1,
-    paddingVertical: 8,
-    alignItems: "center",
-    borderRadius: 20,
-    marginHorizontal: 4,
-  },
-  activeTab: {
-    backgroundColor: COLORS.primary,
-  },
-  tabText: {
-    fontSize: 14,
-    color: "#666",
-    fontWeight: "500",
-  },
-  activeTabText: {
-    color: "#fff",
-  },
-  contentScroll: {
-    flex: 1,
-    paddingHorizontal: 0,
-  },
-  section: {
-    marginBottom: 24,
-  },
-  sectionHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 12,
-  },
-  sectionTitle: {
+  headerTitle: {
     fontSize: 18,
-    fontWeight: "bold",
-    color: "#111418",
-    marginLeft: 20,
+    fontWeight: '800',
+    color: COLORS.textMain,
+    letterSpacing: -0.3,
   },
-  seeAll: {
-    fontSize: 14,
-    color: COLORS.primary,
-    fontWeight: "500",
-  },
-  horizontalScroll: {
-    marginBottom: 8,
-  },
-  card: {
-    width: 160,
-    backgroundColor: "#fff",
-    borderRadius: 12,
-    marginRight: 12,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-    overflow: "hidden",
-  },
-  cardImage: {
-    height: 128,
-  },
-  ratingText: {
-    fontSize: 12,
-    fontWeight: "bold",
-    marginLeft: 4,
-    color: "#fff",
-  },
-  cardContent: {
-    padding: 12,
-  },
-  cardTitle: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: "#111418",
-  },
-  cardLocation: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginTop: 4,
-  },
-  locationIcon: { fontSize: 14, color: "#617589" },
-  locationText: {
-    fontSize: 14,
-    color: "#617589",
-    marginLeft: 4,
-  },
-  listItem: {
-    flexDirection: "row",
-    backgroundColor: "#fff",
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 12,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-    alignItems: "center",
-  },
-  listImage: {
-    width: 64,
-    height: 64,
-    borderRadius: 8,
-  },
-  listContent: {
+  center: {
     flex: 1,
-    marginLeft: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  listTitle: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: "#111418",
-  },
-  listSubtitle: {
-    fontSize: 14,
-    color: "#617589",
-    marginTop: 2,
-  },
-  listMeta: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginTop: 4,
-  },
-  categoryBadge: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: COLORS.primary,
-    backgroundColor: "rgba(10,132,255,0.1)",
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 4,
-    marginRight: 8,
-  },
-  distanceText: {
-    fontSize: 12,
-    color: "#617589",
-  },
-  directionsButton: {
-    padding: 8,
-  },
-  directionsIcon: { fontSize: 20, color: "#999" },
-  cameraButton: {
-    position: "absolute",
-    bottom: 100,
-    right: 16,
-    width: 60,
-    height: 60,
-    backgroundColor: "#007AFF",
-    borderRadius: 30,
-    justifyContent: "center",
-    alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 5,
-  },
-  loaderOverlay: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: "rgba(0,0,0,0.6)",
-    justifyContent: "center",
-    alignItems: "center",
-    zIndex: 999,
-  },
-  loaderText: { marginTop: 12, color: "#fff", fontSize: 16, fontWeight: "500" },
-  favoriteIcon: {
-    position: "absolute",
-    top: 8,
-    right: 8,
-    backgroundColor: "#fff",
-    padding: 6,
-    borderRadius: 16,
-  },
-  ratingBottom: {
-    position: "absolute",
-    bottom: 8,
-    right: 8,
-    backgroundColor: "rgba(0,0,0,0.7)",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  gridContainer: {
-    padding: 8,
-  },
-  gridItem: {
+  mapContainer: {
     flex: 1,
-    margin: 8,
-    maxWidth: (Dimensions.get('window').width - 56) / 2, // Account for padding and margins
+    overflow: 'hidden',
   },
   emptyContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
+    paddingVertical: 80,
+    paddingHorizontal: 32,
+  },
+  emptyIconFrame: {
+    width: 72,
+    height: 72,
+    borderRadius: 24,
+    backgroundColor: COLORS.lightGray,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
   },
   emptyText: {
-    fontSize: 16,
-    color: '#666',
+    fontSize: 17,
+    fontWeight: '800',
+    color: COLORS.textMain,
     textAlign: 'center',
+    letterSpacing: -0.3,
+  },
+  emptySubtext: {
+    fontSize: 13,
+    color: COLORS.textMuted,
+    textAlign: 'center',
+    marginTop: 6,
+    lineHeight: 18,
+    fontWeight: '500',
+  },
+  gridContainer: {
+    paddingHorizontal: 12,
+    paddingTop: 10,
+  },
+  gridItem: {
+    flex: 1,
+    marginHorizontal: 4,
+    marginVertical: 8,
+    maxWidth: (Dimensions.get('window').width - 40) / 2,
+  },
+  tabs: {
+    flexDirection: "row",
+    paddingHorizontal: 24,
+    backgroundColor: COLORS.background,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderColor: 'rgba(15, 23, 42, 0.05)',
+  },
+  tab: {
+    flex: 1,
+    paddingVertical: 10,
+    alignItems: "center",
+    borderRadius: 12,
+    marginHorizontal: 3,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  activeTab: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+  tabText: {
+    fontSize: 13,
+    color: COLORS.textMuted,
+    fontWeight: "700",
+  },
+  activeTabText: {
+    color: "#fff",
+  },
+  floatingButtonsContainer: {
+    position: 'absolute',
+    bottom: 24,
+    right: 24,
+    flexDirection: 'column',
+    gap: 12,
+  },
+  floatingButton: {
+    width: 56,
+    height: 56,
+    backgroundColor: COLORS.primary,
+    borderRadius: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 6,
+  },
+  mapToggleBtn: {
+    backgroundColor: COLORS.accent,
+    shadowColor: COLORS.accent,
+  },
+  loaderOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(15, 23, 42, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 999,
+  },
+  loaderText: {
+    marginTop: 14,
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '700',
   },
 });
 

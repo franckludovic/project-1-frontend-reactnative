@@ -1,52 +1,124 @@
 import React, { useState } from 'react';
-import { View, TextInput as RNTextInput, StyleSheet, Text } from 'react-native';
-import { COLORS } from '../constants';
+import { View, TextInput as RNTextInput, StyleSheet, Text, TextInputProps, TouchableOpacity } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { COLORS, SIZES } from '../constants';
 
-type Props = {
-  placeholder: string;
-  value: string;
-  onChangeText: (text: string) => void;
-  secureTextEntry?: boolean;
+type Props = TextInputProps & {
   error?: string;
   label?: string;
+  leftIcon?: string;
+  rightIcon?: React.ReactNode;
 };
 
-const TextInput: React.FC<Props> = ({ placeholder, value, onChangeText, secureTextEntry = false, error, label }) => {
+const TextInput: React.FC<Props> = ({ 
+  placeholder, 
+  value, 
+  onChangeText, 
+  secureTextEntry = false, 
+  error, 
+  label, 
+  leftIcon,
+  rightIcon,
+  ...rest 
+}) => {
   const [focused, setFocused] = useState(false);
 
   return (
     <View style={styles.container}>
       {label && <Text style={styles.label}>{label}</Text>}
-      <RNTextInput
-        style={[styles.input, focused && styles.inputFocused, error && styles.inputError]}
-        placeholder={placeholder}
-        value={value}
-        onChangeText={onChangeText}
-        secureTextEntry={secureTextEntry}
-        onFocus={() => setFocused(true)}
-        onBlur={() => setFocused(false)}
-        placeholderTextColor="#999"
-      />
+      <View style={[
+        styles.inputWrapper,
+        focused && styles.inputFocused, 
+        error ? styles.inputError : null
+      ]}>
+        {leftIcon && (
+          <Ionicons 
+            name={leftIcon as any} 
+            size={20} 
+            color={error ? COLORS.redAlert : (focused ? COLORS.primary : COLORS.textLight)} 
+            style={styles.leftIcon} 
+          />
+        )}
+        
+        <RNTextInput
+          style={styles.input}
+          placeholder={placeholder}
+          value={value}
+          onChangeText={onChangeText}
+          secureTextEntry={secureTextEntry}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
+          placeholderTextColor={COLORS.textLight}
+          autoCorrect={false}
+          {...rest}
+        />
+
+        {rightIcon && (
+          <View style={styles.rightIconContainer}>
+            {rightIcon}
+          </View>
+        )}
+      </View>
       {error && <Text style={styles.errorText}>{error}</Text>}
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { marginBottom: 16 },
-  label: { fontSize: 14, fontWeight: '600', color: '#0A0A0A', marginBottom: 6 },
-  input: {
-    borderWidth: 1,
-    borderColor: '#E6E6E6',
-    borderRadius: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    fontSize: 14,
-    backgroundColor: '#F9F9F9',
+  container: { 
+    marginBottom: 16,
   },
-  inputFocused: { borderColor: COLORS.orange, backgroundColor: '#fff' },
-  inputError: { borderColor: '#E74C3C' },
-  errorText: { fontSize: 12, color: '#E74C3C', marginTop: 4 },
+  label: { 
+    fontSize: 12, 
+    fontWeight: '800', 
+    color: COLORS.textMuted, 
+    marginBottom: 6,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+  },
+  inputWrapper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: COLORS.borderLight || '#E2E8F0',
+    borderRadius: SIZES.radius || 14,
+    backgroundColor: '#F8FAFC',
+    paddingHorizontal: 16,
+    height: 54,
+  },
+  leftIcon: {
+    marginRight: 12,
+  },
+  input: {
+    flex: 1,
+    height: '100%',
+    fontSize: 15,
+    color: COLORS.textMain,
+    fontWeight: '600',
+  },
+  rightIconContainer: {
+    marginLeft: 10,
+  },
+  inputFocused: { 
+    borderColor: COLORS.primary, 
+    backgroundColor: '#fff',
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  inputError: { 
+    borderColor: COLORS.redAlert,
+    backgroundColor: COLORS.redLight,
+  },
+  errorText: { 
+    fontSize: 11, 
+    fontWeight: '700',
+    color: COLORS.redAlert, 
+    marginTop: 6,
+    marginLeft: 4,
+  },
 });
 
 export default TextInput;

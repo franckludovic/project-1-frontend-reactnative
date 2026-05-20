@@ -6,22 +6,33 @@ import { COLORS } from '../constants';
 type Props = {
   value: string;
   onChangeText: (text: string) => void;
+  placeholder?: string;
 };
 
-const SearchBar: React.FC<Props> = ({ value, onChangeText }) => {
+const SearchBar: React.FC<Props> = ({ value, onChangeText, placeholder = "Search by place, date, or tags..." }) => {
   return (
     <View style={styles.container}>
       <View style={styles.searchContainer}>
         <View style={styles.iconContainer}>
-          <Ionicons name="search" size={20} color={COLORS.textMuted} />
+          <Ionicons name="search-outline" size={20} color={COLORS.textLight} />
         </View>
         <TextInput
           style={styles.input}
-          placeholder="Search by place, date, or tags..."
-          placeholderTextColor={COLORS.textMuted}
+          placeholder={placeholder}
+          placeholderTextColor={COLORS.textLight}
           value={value}
           onChangeText={onChangeText}
+          autoCorrect={false}
         />
+        {value.length > 0 && (
+          <Ionicons 
+            name="close-circle" 
+            size={18} 
+            color={COLORS.textLight} 
+            onPress={() => onChangeText('')}
+            style={styles.clearIcon}
+          />
+        )}
       </View>
     </View>
   );
@@ -29,33 +40,33 @@ const SearchBar: React.FC<Props> = ({ value, onChangeText }) => {
 
 const styles = StyleSheet.create({
   container: {
-    paddingHorizontal: 20,
+    paddingHorizontal: 24,
     paddingVertical: 12,
     width: '100%',
+    backgroundColor: COLORS.background,
   },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    height: 48,
-    backgroundColor: COLORS.surfaceLight,
-    borderRadius: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.05)',
+    height: 50,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
   },
   iconContainer: {
     paddingLeft: 16,
-    paddingRight: 8,
+    paddingRight: 10,
   },
   input: {
     flex: 1,
-    fontSize: 16,
+    fontSize: 15,
     color: COLORS.textMain,
     paddingVertical: 0,
+    fontWeight: '500',
+  },
+  clearIcon: {
+    paddingHorizontal: 12,
   },
 });
 

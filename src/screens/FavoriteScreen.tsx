@@ -9,8 +9,9 @@ import FilterChips from '../components/notepage/FilterChips';
 import { router } from 'expo-router';
 import FavoritesList from '../components/favorites/FavoritesList';
 import { STATIC_BASE_URL } from '../config/config';
-import { getFavoritesByUserId, removeFavorite } from '../services/favoriteService';
-import { getPlacesByUserId } from '../services/placeService';
+import { getFavoritesByUserId, removeFavorite } from '../services/local/favoriteService';
+import { getPlacesByUserId } from '../services/local/placeService';
+import { getPlacePhotos } from '../services/local/photoService';
 
 type FavoriteItem = {
   fav_id: number;
@@ -71,45 +72,63 @@ const FavoritesPage: React.FC = () => {
       // Create a map of places for quick lookup
       const placesMap = new Map(placesData.map(place => [place.place_id, place]));
 
-      const enriched: EnrichedFavorite[] = await Promise.all(
-        favoritesData.slice(0, 10).map(async (favorite) => {
-          const place = placesMap.get(favorite.place_id);
-          if (!place) return null;
+      const enrichedPromises = favoritesData.slice(0, 10).map(async (favorite) => {
+        const place = placesMap.get(favorite.place_id);
+        if (!place) return null;
 
-          let normalizedUrl: string;
+        let normalizedUrl: string;
 
-          if (place.image_url) {
-            if (place.image_url.startsWith("http") || place.image_url.startsWith("file://")) {
-              normalizedUrl = place.image_url;
-            } else {
-              // Ensure leading slash when concatenating
-              normalizedUrl = `${STATIC_BASE_URL}${place.image_url.startsWith("/") ? "" : "/"}${place.image_url}`;
-            }
+        if (place.image_url) {
+          if (place.image_url.startsWith("http") || place.image_url.startsWith("file://")) {
+            normalizedUrl = place.image_url;
           } else {
+            // Ensure leading slash when concatenating
+            normalizedUrl = `${STATIC_BASE_URL}${place.image_url.startsWith("/") ? "" : "/"}${place.image_url}`;
+          }
+        } else {
+          // Try to get place photos if no image_url
+          try {
+            const photos = await getPlacePhotos(favorite.place_id);
+            if (photos.length > 0) {
+              const primaryPhoto = photos.find((photo: any) => photo.display_order === 0) || photos[0];
+              if (primaryPhoto.photo_url) {
+                normalizedUrl = primaryPhoto.photo_url.startsWith("http") || primaryPhoto.photo_url.startsWith("file://")
+                  ? primaryPhoto.photo_url
+                  : `${STATIC_BASE_URL}${primaryPhoto.photo_url.startsWith("/") ? "" : "/"}${primaryPhoto.photo_url}`;
+              } else {
+                normalizedUrl = "https://picsum.photos/400";
+              }
+            } else {
+              normalizedUrl = "https://picsum.photos/400";
+            }
+          } catch (photoError) {
+            console.log("Error fetching photos for favorite place", favorite.place_id, photoError);
             normalizedUrl = "https://picsum.photos/400";
           }
+        }
 
-          console.log("Favorite image URL:", normalizedUrl);
+        console.log("Favorite image URL:", normalizedUrl);
 
-          return {
-            fav_id: favorite.fav_id,
-            user_id: favorite.user_id,
-            place_id: favorite.place_id,
-            synched: favorite.synched || 0,
-            created_at: favorite.created_at || new Date().toISOString(),
-            title: place.title,
-            description: place.description || '',
-            latitude: place.latitude,
-            longitude: place.longitude,
-            image_url: place.image_url,
-            place_created_at: place.created_at || new Date().toISOString(),
-            location: await getReadableLocation(place.latitude, place.longitude),
-            imageSource: { uri: normalizedUrl },
-          } as EnrichedFavorite;
-        })
-      );
+        return {
+          fav_id: favorite.fav_id,
+          user_id: favorite.user_id,
+          place_id: favorite.place_id,
+          synched: favorite.synched || 0,
+          created_at: favorite.created_at || new Date().toISOString(),
+          title: place.title,
+          description: place.description || '',
+          latitude: place.latitude,
+          longitude: place.longitude,
+          image_url: place.image_url,
+          place_created_at: place.created_at || new Date().toISOString(),
+          location: await getReadableLocation(place.latitude, place.longitude),
+          imageSource: { uri: normalizedUrl },
+        } as EnrichedFavorite;
+      });
 
-      setFavorites(enriched.filter(fav => fav !== null) as EnrichedFavorite[]);
+      const enriched = (await Promise.all(enrichedPromises)).filter(fav => fav !== null) as EnrichedFavorite[];
+
+      setFavorites(enriched);
     } catch (error) {
       console.error('Failed to load favorites', error);
       Alert.alert('Error', 'Failed to load favorites');
@@ -179,27 +198,6 @@ const FavoritesPage: React.FC = () => {
   return (
     <SafeAreaView style={styles.container}>
       <Header centerContent={<Text style={styles.headerTitle}>My Favorites</Text>} />
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false} refreshControl={
-        <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-      }>
-        <View style={styles.content}>
-          <SearchBar
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-          />
-          <FilterChips selectedFilter={selectedFilter} onFilterChange={handleFilterChange} />
-          {filteredFavorites.length === 0 ? (
-            <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>
-                {favorites.length === 0 ? 'No favorites yet' : 'No favorites match this filter'}
-              </Text>
-              <Text style={styles.emptySubtext}>
-                {favorites.length === 0
-                  ? 'Add some places to your favorites to see them here'
-                  : 'Try changing the filter to see more favorites'}
-              </Text>
-            </View>
-          ) : (
             <FavoritesList
               favorites={filteredFavorites.map(fav => ({
                 id: fav.place_id,
@@ -207,21 +205,30 @@ const FavoritesPage: React.FC = () => {
                 title: fav.title,
                 location: fav.location,
                 date: formatDate(fav.created_at),
-                imageSource: fav.imageSource,
+                imageUrl: fav.imageSource.uri,
                 isFavorite: true,
                 synched: fav.synched === 1,
               }))}
-              onToggleFavorite={handleToggleFavorite}
-              onPress={(placeId) =>
-                router.push({
-                  pathname: "/place/[placeId]",
-                  params: { placeId: String(placeId) }, // ✅ pass place_id
-                })
-              }
+        onToggleFavorite={handleToggleFavorite}
+        onPress={(placeId) =>
+          router.push({
+            pathname: "/place/[placeId]",
+            params: { placeId: String(placeId) }, // ✅ pass place_id
+          })
+        }
+        ListHeaderComponent={
+          <View>
+            <SearchBar
+              value={searchQuery}
+              onChangeText={setSearchQuery}
             />
-          )}
-        </View>
-      </ScrollView>
+            <FilterChips selectedFilter={selectedFilter} onFilterChange={handleFilterChange} />
+          </View>
+        }
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+      />
     </SafeAreaView>
   );
 };

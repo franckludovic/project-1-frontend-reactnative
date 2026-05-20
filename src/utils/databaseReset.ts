@@ -238,8 +238,8 @@ export const getDatabaseStats = async (): Promise<any> => {
     const stats: any = {};
 
     for (const table of tables) {
-      const result = db.getFirstSync(`SELECT COUNT(*) as count FROM ${table}`);
-      stats[table] = result.count;
+      const result = db.getFirstSync<{ count: number }>(`SELECT COUNT(*) as count FROM ${table}`);
+      stats[table] = result ? result.count : 0;
     }
 
     return stats;

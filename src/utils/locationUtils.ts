@@ -17,13 +17,21 @@ export const reverseGeocode = async (
   longitude: number
 ): Promise<ReverseGeocodeResult> => {
   try {
+    // Check if geocoding is available
+    const isGeocodingAvailable = await Location.hasServicesEnabledAsync();
+    if (!isGeocodingAvailable) {
+      return {
+        readableName: `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`,
+        success: true,
+      };
+    }
+
     // Request location permissions if not already granted
     const { status } = await Location.requestForegroundPermissionsAsync();
     if (status !== 'granted') {
       return {
-        readableName: '',
-        success: false,
-        error: 'Location permission not granted',
+        readableName: `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`,
+        success: true,
       };
     }
 
@@ -64,11 +72,10 @@ export const reverseGeocode = async (
       };
     }
   } catch (error) {
-    console.error('Error performing reverse geocoding:', error);
+    // Suppress error logging for service unavailability
     return {
-      readableName: '',
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown error',
+      readableName: `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`,
+      success: true,
     };
   }
 };

@@ -1,6 +1,8 @@
 import React from 'react';
 import { View, Text, StyleSheet, Image, TouchableOpacity } from 'react-native';
-import Icon from 'react-native-vector-icons/FontAwesome';
+import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
+import { COLORS } from '../constants';
 
 const reactLogo = require('../assets/images/image 2.jpg');
 
@@ -28,34 +30,41 @@ const PlaceCard: React.FC<Props> = ({
   const source = imageUrl ? { uri: imageUrl } : fallback;
 
   return (
-    <TouchableOpacity style={styles.container} onPress={onPress} activeOpacity={0.8}>
+    <TouchableOpacity style={styles.container} onPress={onPress} activeOpacity={0.85}>
       <Image source={source} style={styles.image} />
-      <View style={styles.overlay} />
+      
+      {/* Dynamic Linear Gradient Overlay */}
+      <LinearGradient
+        colors={['transparent', 'rgba(15, 23, 42, 0.85)']}
+        style={styles.gradientOverlay}
+      />
 
       {synched !== undefined && (
         <View style={[styles.syncBadge, synched ? styles.synchedBadge : styles.unsynchedBadge]}>
-          <Text style={styles.syncBadgeText}>{synched ? 'Synched' : 'Unsynched'}</Text>
+          <Text style={styles.syncBadgeText}>{synched ? 'Synced' : 'Offline'}</Text>
         </View>
       )}
 
-      <TouchableOpacity
-        style={styles.favoriteButton}
-        onPress={onFavoritePress}
-        activeOpacity={0.7}
-      >
-        <Icon
-          name={isFavorite ? 'heart' : 'heart-o'}
-          size={20}
-          color={isFavorite ? '#FF6B6B' : '#666'}
-        />
-      </TouchableOpacity>
+      {onFavoritePress && (
+        <TouchableOpacity
+          style={styles.favoriteButton}
+          onPress={onFavoritePress}
+          activeOpacity={0.7}
+        >
+          <Ionicons
+            name={isFavorite ? 'heart' : 'heart-outline'}
+            size={18}
+            color={isFavorite ? COLORS.primary : COLORS.textMuted}
+          />
+        </TouchableOpacity>
+      )}
 
       <View style={styles.content}>
-        <Text style={styles.title}>{title}</Text>
+        <Text style={styles.title} numberOfLines={1}>{title}</Text>
         {location && (
           <View style={styles.locationContainer}>
-            <Text style={styles.locationIcon}>📍</Text>
-            <Text style={styles.location}>{location}</Text>
+            <Ionicons name="location-sharp" size={12} color="#fff" style={styles.locationIcon} />
+            <Text style={styles.location} numberOfLines={1}>{location}</Text>
           </View>
         )}
       </View>
@@ -66,50 +75,88 @@ const PlaceCard: React.FC<Props> = ({
 const styles = StyleSheet.create({
   container: {
     width: 175,
-    height: 175,
-    borderRadius: 12,
+    height: 220,
+    borderRadius: 20,
     overflow: 'hidden',
-    marginRight: 12,
-    backgroundColor: '#F6F6F6',
+    marginRight: 14,
+    backgroundColor: COLORS.stone200,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 3,
   },
-  image: { ...StyleSheet.absoluteFillObject, width: '100%', height: '100%' },
-  overlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.3)' },
+  image: { 
+    ...StyleSheet.absoluteFillObject, 
+    width: '100%', 
+    height: '100%' 
+  },
+  gradientOverlay: { 
+    ...StyleSheet.absoluteFillObject 
+  },
   favoriteButton: {
     position: 'absolute',
-    top: 8,
-    right: 8,
-    backgroundColor: 'rgba(255,255,255,0.8)',
-    borderRadius: 16,
-    padding: 4,
+    top: 10,
+    right: 10,
+    backgroundColor: 'rgba(255, 255, 255, 0.85)',
+    borderRadius: 12,
+    padding: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 1,
   },
   syncBadge: {
     position: 'absolute',
-    top: 8,
-    left: 8,
-    paddingHorizontal: 4,
-    paddingVertical: 6,
-    borderRadius: 12,
+    top: 10,
+    left: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
   },
   synchedBadge: {
-    backgroundColor: '#10b981', // green
-    width: 70,
-    alignItems: 'center',
+    backgroundColor: COLORS.emeraldGreen,
   },
   unsynchedBadge: {
-    backgroundColor: '#ff0000', // red
-    width: 80,
-    alignItems: 'center',
+    backgroundColor: COLORS.redAlert,
   },
   syncBadgeText: {
-    fontSize: 10,
-    fontWeight: 'bold',
+    fontSize: 9,
+    fontWeight: '800',
     color: 'white',
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
   },
-  content: { flex: 1, justifyContent: 'flex-end', padding: 12 },
-  title: { fontSize: 16, fontWeight: '700', color: '#fff', marginBottom: 8 },
-  locationContainer: { flexDirection: 'row', alignItems: 'center' },
-  locationIcon: { fontSize: 14, marginRight: 4 },
-  location: { fontSize: 12, color: '#fff' },
+  content: { 
+    flex: 1, 
+    justifyContent: 'flex-end', 
+    padding: 14 
+  },
+  title: { 
+    fontSize: 16, 
+    fontWeight: '800', 
+    color: '#fff', 
+    marginBottom: 4,
+    letterSpacing: -0.2,
+  },
+  locationContainer: { 
+    flexDirection: 'row', 
+    alignItems: 'center' 
+  },
+  locationIcon: { 
+    marginRight: 3 
+  },
+  location: { 
+    fontSize: 11, 
+    color: 'rgba(255, 255, 255, 0.85)',
+    fontWeight: '600',
+  },
 });
 
 export default PlaceCard;

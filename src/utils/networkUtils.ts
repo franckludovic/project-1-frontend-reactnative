@@ -25,12 +25,12 @@ export const useNetworkState = (): NetworkState => {
     // Get initial network state
     const unsubscribe = NetInfo.addEventListener(state => {
       // TESTING: Force offline mode if flag is set
-      const actualIsOnline = state.isConnected && state.isInternetReachable !== false;
+      const actualIsOnline = !!state.isConnected && state.isInternetReachable !== false;
       const isOnline = FORCE_OFFLINE_FOR_TESTING ? false : actualIsOnline;
 
       setNetworkState({
-        isConnected: FORCE_OFFLINE_FOR_TESTING ? false : state.isConnected,
-        isInternetReachable: FORCE_OFFLINE_FOR_TESTING ? false : state.isInternetReachable,
+        isConnected: FORCE_OFFLINE_FOR_TESTING ? false : (state.isConnected ?? false),
+        isInternetReachable: FORCE_OFFLINE_FOR_TESTING ? false : (state.isInternetReachable ?? false),
         type: state.type,
         isOnline,
       });
@@ -53,7 +53,7 @@ export const checkInternetConnectivity = async (): Promise<boolean> => {
 
   try {
     const state = await NetInfo.fetch();
-    return state.isConnected && state.isInternetReachable !== false;
+    return !!state.isConnected && state.isInternetReachable !== false;
   } catch (error) {
     console.error('Error checking internet connectivity:', error);
     return false;
@@ -64,10 +64,10 @@ export const checkInternetConnectivity = async (): Promise<boolean> => {
 export const addNetworkListener = (callback: (state: NetworkState) => void) => {
   return NetInfo.addEventListener(state => {
     const networkState: NetworkState = {
-      isConnected: FORCE_OFFLINE_FOR_TESTING ? false : state.isConnected,
-      isInternetReachable: FORCE_OFFLINE_FOR_TESTING ? false : state.isInternetReachable,
+      isConnected: FORCE_OFFLINE_FOR_TESTING ? false : (state.isConnected ?? false),
+      isInternetReachable: FORCE_OFFLINE_FOR_TESTING ? false : (state.isInternetReachable ?? false),
       type: state.type,
-      isOnline: FORCE_OFFLINE_FOR_TESTING ? false : (state.isConnected && state.isInternetReachable !== false),
+      isOnline: FORCE_OFFLINE_FOR_TESTING ? false : (!!state.isConnected && state.isInternetReachable !== false),
     };
     callback(networkState);
   });

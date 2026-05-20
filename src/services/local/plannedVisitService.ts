@@ -1,4 +1,4 @@
-import db from '../database/database';
+import db from '../../database/database';
 
 export interface PlannedVisit {
   planned_visit_id?: number;

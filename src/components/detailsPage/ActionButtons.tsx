@@ -5,29 +5,8 @@ import {
   StyleSheet,
   TouchableOpacity,
 } from 'react-native';
-import { router } from 'expo-router';
-import Icon from 'react-native-vector-icons/MaterialIcons';
-
-// Colors extracted from the HTML Tailwind Config
-const COLORS = {
-  primary: '#fb923c',
-  primaryDark: '#ea580c',
-  backgroundLight: '#fafaf9',
-  surfaceLight: '#ffffff',
-  surfaceDark: '#292524',
-  stone900: '#1c1917',
-  stone600: '#57534e',
-  stone400: '#a8a29e',
-  stone200: '#e7e5e4',
-  amber50: '#fffbeb',
-  amber100: '#fef3c7',
-  amber600: '#d97706',
-  emerald50: '#ecfdf5',
-  emerald100: '#d1fae5',
-  emerald500: '#10b981',
-  emerald600: '#059669',
-  emerald700: '#047857',
-};
+import { Ionicons } from '@expo/vector-icons';
+import { COLORS } from '../../constants';
 
 type Place = {
   id: string;
@@ -54,19 +33,31 @@ const ActionButtons: React.FC<ActionButtonsProps> = ({ place, onAddNote, onPlanV
       <TouchableOpacity
         style={styles.actionBtnWhite}
         onPress={onAddNote}
+        activeOpacity={0.8}
       >
-        <Icon name="edit" size={26} color={COLORS.primary} />
+        <View style={styles.iconCircle}>
+          <Ionicons name="document-text-outline" size={20} color={COLORS.primary} />
+        </View>
         <Text style={styles.actionBtnTextGray}>Add Note</Text>
       </TouchableOpacity>
 
-      <TouchableOpacity style={styles.actionBtnWhite} onPress={onPlanVisit}>
-        <Icon name="event" size={26} color={COLORS.stone400} />
-        <Text style={styles.actionBtnTextGray}>Plan a visit</Text>
+      <TouchableOpacity 
+        style={styles.actionBtnWhite} 
+        onPress={onPlanVisit}
+        activeOpacity={0.8}
+      >
+        <View style={[styles.iconCircle, { backgroundColor: COLORS.accentLight }]}>
+          <Ionicons name="calendar-outline" size={20} color={COLORS.accent} />
+        </View>
+        <Text style={styles.actionBtnTextGray}>Plan Visit</Text>
       </TouchableOpacity>
 
-      <TouchableOpacity style={styles.actionBtnDark}>
-        <Icon name="directions" size={26} color="#fff" />
-        <Text style={styles.actionBtnTextWhite}>Directions</Text>
+      <TouchableOpacity 
+        style={styles.actionBtnDark}
+        activeOpacity={0.85}
+      >
+        <Ionicons name="navigate" size={20} color="#fff" />
+        <Text style={styles.actionBtnTextWhite}>Go There</Text>
       </TouchableOpacity>
     </View>
   );
@@ -76,48 +67,57 @@ const styles = StyleSheet.create({
   actionRow: {
     flexDirection: 'row',
     paddingHorizontal: 24,
-    paddingTop: 24,
+    paddingTop: 16,
     paddingBottom: 24,
     gap: 12,
   },
   actionBtnWhite: {
     flex: 1,
     backgroundColor: COLORS.surfaceLight,
-    borderWidth: 1,
-    borderColor: COLORS.stone200,
+    borderWidth: 1.5,
+    borderColor: COLORS.borderLight,
     borderRadius: 16,
     paddingVertical: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4,
+    gap: 6,
     elevation: 1,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.02,
+    shadowRadius: 4,
+  },
+  iconCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: COLORS.primaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   actionBtnDark: {
     flex: 1,
-    backgroundColor: COLORS.stone900,
+    backgroundColor: COLORS.textMain,
     borderRadius: 16,
     paddingVertical: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4,
+    flexDirection: 'row',
+    gap: 8,
     elevation: 4,
-    shadowColor: '#000',
+    shadowColor: COLORS.textMain,
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
+    shadowOpacity: 0.15,
     shadowRadius: 8,
   },
   actionBtnTextGray: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: COLORS.stone600,
+    fontSize: 11,
+    fontWeight: '800',
+    color: COLORS.textMuted,
   },
   actionBtnTextWhite: {
-    fontSize: 12,
-    fontWeight: '700',
+    fontSize: 13,
+    fontWeight: '800',
     color: '#fff',
   },
 });

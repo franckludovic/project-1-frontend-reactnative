@@ -19,23 +19,29 @@ const FilterChips: React.FC<Props> = ({ selectedFilter, onFilterChange }) => {
   return (
     <View style={styles.container}>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-        {filters.map((filter) => (
-          <TouchableOpacity
-            key={filter.key}
-            style={[
-              styles.chip,
-              selectedFilter === filter.key && styles.selectedChip,
-            ]}
-            onPress={() => onFilterChange(filter.key)}
-            activeOpacity={0.7}
-          >
-            <Text
-              style={selectedFilter === filter.key ? styles.selectedChipText : styles.chipText}
+        {filters.map((filter) => {
+          const isSelected = selectedFilter === filter.key;
+          return (
+            <TouchableOpacity
+              key={filter.key}
+              style={[
+                styles.chip,
+                isSelected ? styles.selectedChip : styles.unselectedChip,
+              ]}
+              onPress={() => onFilterChange(filter.key)}
+              activeOpacity={0.8}
             >
-              {filter.label}
-            </Text>
-          </TouchableOpacity>
-        ))}
+              <Text
+                style={[
+                  styles.chipText,
+                  isSelected ? styles.selectedChipText : styles.unselectedChipText
+                ]}
+              >
+                {filter.label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
       </ScrollView>
     </View>
   );
@@ -43,41 +49,42 @@ const FilterChips: React.FC<Props> = ({ selectedFilter, onFilterChange }) => {
 
 const styles = StyleSheet.create({
   container: {
-    paddingHorizontal: 20,
-    paddingVertical: 8,
+    paddingVertical: 12,
   },
   scrollContent: {
     alignItems: 'center',
-    paddingRight: 20,
+    paddingRight: 24,
   },
   chip: {
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 20,
-    backgroundColor: COLORS.surfaceLight,
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.1)',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 1,
-    elevation: 1,
-    marginRight: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    marginRight: 10,
   },
   selectedChip: {
-    backgroundColor: COLORS.orange,
-    borderColor: COLORS.orange,
-    shadowColor: COLORS.orange,
-    shadowOpacity: 0.25,
-    elevation: 3,
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+    elevation: 2,
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+  },
+  unselectedChip: {
+    backgroundColor: COLORS.surfaceLight,
+    borderColor: COLORS.borderLight,
   },
   chipText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: COLORS.textMuted,
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: -0.2,
   },
   selectedChipText: {
-    color: 'white',
+    color: '#fff',
+  },
+  unselectedChipText: {
+    color: COLORS.textMuted,
   },
 });
 

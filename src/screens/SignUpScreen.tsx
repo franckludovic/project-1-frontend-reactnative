@@ -1,17 +1,30 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, SafeAreaView, TouchableOpacity } from 'react-native';
+import { 
+  View, 
+  Text, 
+  StyleSheet, 
+  ScrollView, 
+  SafeAreaView, 
+  TouchableOpacity, 
+  Alert,
+  Image,
+  Dimensions
+} from 'react-native';
 import { useRouter } from 'expo-router';
-import { COLORS } from '../constants';
+import { LinearGradient } from 'expo-linear-gradient';
+import { COLORS, SIZES, SHADOWS } from '../constants';
 import TextInput from '../components/TextInput';
 import Button from '../components/Button';
-import CenteredView from '../components/CenteredView';
-import { post } from '../services/api';
 import { useAuth } from '../context/AuthContext';
-import { useNetworkState } from '../utils/networkUtils';
-import { createUserOffline } from '../services/userService';
+import { createUserOffline } from '../services/local/userService';
+import { supabase } from '../config/supabaseClient';
+import { Ionicons } from '@expo/vector-icons';
+
+const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 type Errors = {
   fullName?: string;
+  username?: string;
   email?: string;
   password?: string;
   confirmPassword?: string;
@@ -24,15 +37,19 @@ type Props = {
 const SignUpScreen: React.FC<Props> = ({ onLogin }) => {
   const router = useRouter();
   const [fullName, setFullName] = useState('');
+  const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [errors, setErrors] = useState<Errors>({});
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const auth = useAuth();
-  const { isConnected } = useNetworkState();
   const [loading, setLoading] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
+
+  // Password visibility states
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const validateForm = () => {
     const newErrors: Errors = {};
@@ -41,6 +58,14 @@ const SignUpScreen: React.FC<Props> = ({ onLogin }) => {
       newErrors.fullName = 'Full name is required';
     } else if (fullName.trim().length < 2) {
       newErrors.fullName = 'Full name must be at least 2 characters';
+    }
+
+    if (!username.trim()) {
+      newErrors.username = 'Username is required';
+    } else if (username.trim().length < 3) {
+      newErrors.username = 'Username must be at least 3 characters';
+    } else if (!/^[a-zA-Z0-9_]+$/.test(username.trim())) {
+      newErrors.username = 'Only alphanumeric characters and underscores allowed';
     }
 
     if (!email.trim()) {
@@ -62,7 +87,7 @@ const SignUpScreen: React.FC<Props> = ({ onLogin }) => {
     }
 
     setErrors(newErrors);
-    return Object.keys(newErrors).length === 0 && agreedToTerms;
+    return Object.keys(newErrors).length === 0;
   };
 
   const handleSignUp = async () => {
@@ -76,24 +101,63 @@ const SignUpScreen: React.FC<Props> = ({ onLogin }) => {
       setServerError(null);
       setLoading(true);
 
+      const cleanUsername = username.trim().toLowerCase();
+
       try {
-        // Try online registration first
-        const res = await post('/auth/register', { full_name: fullName, email, password, role: 'user' });
-        const payload = res?.data ?? res;
-        const user = payload?.user ?? payload;
-        const tokens = {
-          accessToken: payload?.accessToken || payload?.access_token,
-          refreshToken: payload?.refreshToken || payload?.refresh_token,
-        };
-        auth.signIn(user, tokens);
-        router.push('/home');
+        // 1. Try online registration via Supabase
+        const { data, error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            data: {
+              full_name: fullName,
+              username: cleanUsername,
+            },
+          },
+        });
+
+        if (error) throw error;
+
+        if (data.session) {
+          const sbUser = data.user!;
+          
+          const onlineUser = {
+            id: sbUser.id,
+            user_id: 0, 
+            email: sbUser.email,
+            full_name: fullName,
+            username: cleanUsername,
+            role: ['user'],
+          };
+
+          const tokens = {
+            accessToken: data.session.access_token,
+            refreshToken: data.session.refresh_token,
+          };
+
+          await auth.signIn(onlineUser, tokens);
+          router.replace('/home');
+        } else {
+          Alert.alert(
+            'Verification Required',
+            'Please check your email address to complete registration!'
+          );
+          handleLogin();
+        }
       } catch (err: any) {
-        // If online fails, try offline registration
         console.log('Online registration failed, trying offline:', err.message);
         try {
-          await createUserOffline({ full_name: fullName, email, password, role: 'user' });
-          await auth.signInOffline({ email, full_name: fullName });
-          router.push('/home');
+          // 2. Try offline registration via local SQLite
+          await createUserOffline({
+            full_name: fullName,
+            email,
+            username: cleanUsername,
+            password,
+            role: 'user',
+          });
+
+          await auth.signInOffline({ email, full_name: fullName, username: cleanUsername });
+          router.replace('/home');
         } catch (offlineErr: any) {
           setServerError(offlineErr.message || 'Registration failed');
         }
@@ -111,57 +175,117 @@ const SignUpScreen: React.FC<Props> = ({ onLogin }) => {
     }
   };
 
+  const renderPasswordToggle = (visible: boolean, setVisible: (v: boolean) => void) => (
+    <TouchableOpacity onPress={() => setVisible(!visible)} activeOpacity={0.7} style={styles.eyeBtn}>
+      <Ionicons 
+        name={visible ? "eye" : "eye-off"} 
+        size={20} 
+        color="#64748B" 
+      />
+    </TouchableOpacity>
+  );
+
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }}>
-      <ScrollView contentContainerStyle={styles.scroll}>
-        <CenteredView>
-          <View style={styles.container}>
-            {/* Header */}
-            <View style={styles.header}>
-              <Text style={styles.logo}>TravelBuddy</Text>
-              <Text style={styles.tagline}>Create Your Account</Text>
+    <View style={styles.container}>
+      {/* Full screen background image */}
+      <Image 
+        source={require('../assets/images/image 7.jpg')} 
+        style={styles.backgroundImage} 
+        resizeMode="cover"
+      />
+      
+      {/* Absolute overlay gradient fading seamlessly */}
+      <LinearGradient
+        colors={[
+          '#ffffff', 
+          '#ffffff', 
+          'rgba(255, 255, 255, 0.95)', 
+          'rgba(255, 255, 255, 0.6)', 
+          'transparent'
+        ]}
+        locations={[0, 0.58, 0.65, 0.8, 0.98]}
+        style={StyleSheet.absoluteFillObject}
+      />
+
+      <SafeAreaView style={styles.safeArea}>
+        <ScrollView 
+          contentContainerStyle={styles.scroll} 
+          showsVerticalScrollIndicator={false} 
+          keyboardShouldPersistTaps="handled"
+        >
+          {/* Main transparent content overlay card */}
+          <View style={styles.contentCard}>
+            <View style={styles.logoContainer}>
+              <Ionicons name="compass" size={32} color="#ffffff" />
+            </View>
+            <Text style={styles.logo}>TravelBuddy</Text>
+            <Text style={styles.tagline}>Create your wanderer account</Text>
+
+            <View style={styles.loginPromptRow}>
+              <Text style={styles.promptText}>Already have an account? </Text>
+              <TouchableOpacity onPress={handleLogin} activeOpacity={0.7}>
+                <Text style={styles.promptLink}>Log in</Text>
+              </TouchableOpacity>
             </View>
 
-            {/* Form */}
+            {/* Registration Form */}
             <View style={styles.form}>
               <TextInput
                 label="Full Name"
-                placeholder="Lichtteinvigh"
+                placeholder="Jane Doe"
                 value={fullName}
                 onChangeText={setFullName}
                 error={errors.fullName}
+                leftIcon="person-outline"
               />
               <TextInput
-                label="Email"
+                label="Username"
+                placeholder="wanderer_123"
+                value={username}
+                onChangeText={setUsername}
+                error={errors.username}
+                autoCapitalize="none"
+                leftIcon="at-outline"
+              />
+              <TextInput
+                label="Email Address"
                 placeholder="your@email.com"
                 value={email}
                 onChangeText={setEmail}
                 error={errors.email}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                leftIcon="mail-outline"
               />
               <TextInput
                 label="Password"
-                placeholder="••••••••"
+                placeholder="Min. 8 characters"
                 value={password}
                 onChangeText={setPassword}
-                secureTextEntry
+                secureTextEntry={!showPassword}
                 error={errors.password}
+                leftIcon="lock-closed-outline"
+                rightIcon={renderPasswordToggle(showPassword, setShowPassword)}
               />
               <TextInput
                 label="Confirm Password"
-                placeholder="••••••••"
+                placeholder="Confirm password"
                 value={confirmPassword}
                 onChangeText={setConfirmPassword}
-                secureTextEntry
+                secureTextEntry={!showConfirmPassword}
                 error={errors.confirmPassword}
+                leftIcon="lock-closed-outline"
+                rightIcon={renderPasswordToggle(showConfirmPassword, setShowConfirmPassword)}
               />
 
               {/* Terms Agreement */}
               <TouchableOpacity
                 style={styles.termsContainer}
                 onPress={() => setAgreedToTerms(!agreedToTerms)}
+                activeOpacity={0.8}
               >
                 <View style={[styles.checkbox, agreedToTerms && styles.checkboxChecked]}>
-                  {agreedToTerms && <Text style={styles.checkmark}>✓</Text>}
+                  {agreedToTerms && <Ionicons name="checkmark" size={14} color="#fff" />}
                 </View>
                 <Text style={styles.termsText}>
                   I agree to the <Text style={styles.termsLink}>Terms of Service</Text> and{' '}
@@ -171,85 +295,141 @@ const SignUpScreen: React.FC<Props> = ({ onLogin }) => {
 
               {/* Sign Up Button */}
               {serverError ? <Text style={styles.serverError}>{serverError}</Text> : null}
+              
               <Button
                 title={loading ? 'Creating...' : 'Create Account'}
                 onPress={handleSignUp}
-                style={[
-                  styles.signUpButton,
-                  (loading || !agreedToTerms) && { opacity: 0.6 },
-                ]}
+                disabled={loading}
+                style={styles.signUpButton}
               />
-
-              {/* Divider */}
-              <View style={styles.divider}>
-                <View style={styles.line} />
-                <Text style={styles.dividerText}>or</Text>
-                <View style={styles.line} />
-              </View>
-
-              {/* Login Link */}
-              <View style={styles.loginContainer}>
-                <Text style={styles.loginText}>Already have an account? </Text>
-                <TouchableOpacity onPress={handleLogin}>
-                  <Text style={styles.loginLink}>Login</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            {/* Footer */}
-            <View style={styles.footer}>
-              <Text style={styles.footerText}>
-                We'll help you capture and sync your travel memories.
-              </Text>
             </View>
           </View>
-        </CenteredView>
-      </ScrollView>
-    </SafeAreaView>
+
+          {/* Spacer */}
+          <View style={styles.bottomSpacer} />
+        </ScrollView>
+      </SafeAreaView>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
-  scroll: { paddingBottom: 40, paddingTop: 80 },
-  container: { width: '100%', paddingHorizontal: 20, justifyContent: 'center' },
-  header: { alignItems: 'center', marginBottom: 40 },
-  logo: { fontSize: 28, fontWeight: '700', color: COLORS.orange, marginBottom: 8 },
-  tagline: { fontSize: 18, fontWeight: '600', color: '#0A0A0A' },
-  form: { width: '100%', marginBottom: 40 },
+  container: {
+    flex: 1,
+    backgroundColor: '#ffffff',
+  },
+  backgroundImage: {
+    ...StyleSheet.absoluteFillObject,
+    width: '100%',
+    height: '100%',
+  },
+  safeArea: {
+    flex: 1,
+  },
+  scroll: { 
+    flexGrow: 1,
+  },
+  contentCard: {
+    paddingHorizontal: 24,
+    paddingTop: 36,
+    alignItems: 'center',
+  },
+  logoContainer: {
+    width: 58,
+    height: 58,
+    borderRadius: 16,
+    backgroundColor: '#FF5A36',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+    ...SHADOWS.light,
+  },
+  logo: { 
+    fontSize: 32, 
+    fontWeight: '800', 
+    color: '#1E293B', 
+    marginBottom: 8, 
+    letterSpacing: -0.5,
+  },
+  tagline: { 
+    fontSize: 14, 
+    fontWeight: '600', 
+    color: '#64748B',
+    marginBottom: 8,
+  },
+  loginPromptRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  promptText: {
+    fontSize: 14,
+    color: '#64748B',
+    fontWeight: '600',
+  },
+  promptLink: {
+    fontSize: 14,
+    color: '#FF5A36',
+    fontWeight: '800',
+  },
+  form: { 
+    width: '100%', 
+  },
+  eyeBtn: {
+    padding: 4,
+  },
   termsContainer: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginBottom: 20,
+    alignItems: 'center',
+    marginVertical: 14,
     paddingRight: 8,
   },
   checkbox: {
-    width: 20,
-    height: 20,
-    borderWidth: 2,
-    borderColor: '#E6E6E6',
-    borderRadius: 4,
+    width: 22,
+    height: 22,
+    borderWidth: 1.5,
+    borderColor: '#CBD5E1',
+    borderRadius: 7,
     marginRight: 10,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 2,
+    backgroundColor: '#F8FAFC',
   },
   checkboxChecked: {
-    backgroundColor: COLORS.orange,
-    borderColor: COLORS.orange,
+    backgroundColor: '#FF5A36',
+    borderColor: '#FF5A36',
   },
-  checkmark: { color: '#fff', fontSize: 14, fontWeight: 'bold' },
-  termsText: { fontSize: 13, color: '#666', flex: 1, lineHeight: 18 },
-  termsLink: { color: COLORS.orange, fontWeight: '600', textDecorationLine: 'underline' },
-  signUpButton: { marginTop: 8 },
-  serverError: { color: '#b00020', textAlign: 'center', marginBottom: 8 },
-  divider: { flexDirection: 'row', alignItems: 'center', marginVertical: 24 },
-  line: { flex: 1, height: 1, backgroundColor: '#E6E6E6' },
-  dividerText: { marginHorizontal: 12, color: '#999', fontSize: 14 },
-  loginContainer: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center' },
-  loginText: { fontSize: 14, color: '#666' },
-  loginLink: { fontSize: 14, color: COLORS.orange, fontWeight: '600' },
-  footer: { alignItems: 'center', paddingTop: 20, borderTopWidth: 1, borderTopColor: '#E6E6E6' },
-  footerText: { fontSize: 12, color: '#999', textAlign: 'center' },
+  termsText: { 
+    fontSize: 12, 
+    color: '#64748B', 
+    flex: 1, 
+    lineHeight: 18,
+    fontWeight: '600',
+  },
+  termsLink: { 
+    color: '#FF5A36', 
+    fontWeight: '800',
+  },
+  signUpButton: { 
+    marginTop: 8,
+    backgroundColor: '#FF5A36',
+    height: 52,
+    borderRadius: 10,
+    shadowColor: '#FF5A36',
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+  },
+  serverError: { 
+    color: COLORS.redAlert, 
+    textAlign: 'center', 
+    marginBottom: 10, 
+    fontWeight: '700', 
+    fontSize: 12,
+  },
+  bottomSpacer: {
+    height: 60,
+  },
 });
 
 export default SignUpScreen;

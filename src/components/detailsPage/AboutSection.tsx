@@ -3,31 +3,11 @@ import {
   View,
   Text,
   StyleSheet,
-  ImageBackground,
   TouchableOpacity,
 } from 'react-native';
-import Icon from 'react-native-vector-icons/MaterialIcons';
-
-// Colors extracted from the HTML Tailwind Config
-const COLORS = {
-  primary: '#fb923c',
-  primaryDark: '#ea580c',
-  backgroundLight: '#fafaf9',
-  surfaceLight: '#ffffff',
-  surfaceDark: '#292524',
-  stone900: '#1c1917',
-  stone600: '#57534e',
-  stone400: '#a8a29e',
-  stone200: '#e7e5e4',
-  amber50: '#fffbeb',
-  amber100: '#fef3c7',
-  amber600: '#d97706',
-  emerald50: '#ecfdf5',
-  emerald100: '#d1fae5',
-  emerald500: '#10b981',
-  emerald600: '#059669',
-  emerald700: '#047857',
-};
+import { Ionicons } from '@expo/vector-icons';
+import { COLORS } from '../../constants';
+import MapView, { Marker, UrlTile } from 'react-native-maps';
 
 type Place = {
   id: string;
@@ -47,53 +27,65 @@ type AboutSectionProps = {
 };
 
 const AboutSection: React.FC<AboutSectionProps> = ({ place }) => {
+  const mapRegion = {
+    latitude: place.latitude,
+    longitude: place.longitude,
+    latitudeDelta: 0.015,
+    longitudeDelta: 0.015,
+  };
+
   return (
     <View style={styles.sectionContainer}>
       <View style={styles.card}>
         <Text style={styles.sectionTitle}>About this place</Text>
         <Text style={styles.descriptionText}>
-          {place.subtitle || "No description available."}
+          {place.subtitle || "No description provided for this destination."}
         </Text>
 
         {/* Coordinates Grid */}
         <View style={styles.infoGrid}>
           <View style={styles.infoItem}>
             <View style={styles.iconCircle}>
-              <Icon name="near-me" size={18} color={COLORS.stone600} />
+              <Ionicons name="location-sharp" size={16} color={COLORS.primary} />
             </View>
             <View>
               <Text style={styles.infoLabel}>COORDINATES</Text>
-              <Text style={styles.infoValue}>{place.latitude}° N, {place.longitude}° W</Text>
+              <Text style={styles.infoValue}>{place.latitude.toFixed(4)}° N, {place.longitude.toFixed(4)}° W</Text>
             </View>
           </View>
 
           <View style={styles.infoItem}>
             <View style={styles.iconCircle}>
-              <Icon name="schedule" size={18} color={COLORS.stone600} />
+              <Ionicons name="time-sharp" size={16} color={COLORS.accent} />
             </View>
             <View>
               <Text style={styles.infoLabel}>STATUS</Text>
-              <Text style={[styles.infoValue, { color: COLORS.emerald600 }]}>Open Now</Text>
+              <Text style={[styles.infoValue, { color: COLORS.emeraldGreen }]}>Visited</Text>
             </View>
           </View>
         </View>
 
         {/* Map Preview */}
         <View style={styles.mapContainer}>
-          <ImageBackground
-            source={{
-              uri: 'https://lh3.googleusercontent.com/aida-public/AB6AXuCbR3lbYtux5NJN37woD7XKvk0eFNhj7YeA_sOYmlOwtz7wLg9lJ8EYUaDFEZ8fwW59otcPxgaDz8ZV3ClerU6Z_4Noz2wmVSR-uLnm0urDf2ZIdS2ysk4jw5ejIywjzRF9XjSNnsIwClAJ1HLyOuh0u0ANtK5wIsqo_EBjrGZgeVbjNlk8y3oNnhFFVXDBYrlZtBAIxyIjQTwWqFD-RDBLwlZ_sdeP_dVIPsL6vRGbb2d9x7I-A2ryuqH6UDyH5yGrVUsx_m6dD9hL',
-            }}
-            style={styles.mapImage}
-            imageStyle={{ opacity: 0.8 }}
+          <MapView
+            style={StyleSheet.absoluteFillObject}
+            initialRegion={mapRegion}
+            zoomEnabled={false}
+            scrollEnabled={false}
+            rotateEnabled={false}
+            pitchEnabled={false}
+            mapType="none"
           >
-            <View style={styles.mapPin}>
-              <Icon name="location-pin" size={14} color="#fff" />
-            </View>
-            <TouchableOpacity style={styles.viewMapBtn}>
-              <Text style={styles.viewMapText}>View Full Map</Text>
-            </TouchableOpacity>
-          </ImageBackground>
+            <UrlTile
+              urlTemplate="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+              maximumZ={19}
+              flipY={false}
+            />
+            <Marker
+              coordinate={{ latitude: place.latitude, longitude: place.longitude }}
+              pinColor={COLORS.primary}
+            />
+          </MapView>
         </View>
       </View>
     </View>
@@ -107,98 +99,71 @@ const styles = StyleSheet.create({
   },
   card: {
     backgroundColor: COLORS.surfaceLight,
-    borderRadius: 16,
+    borderRadius: 20,
     padding: 20,
-    borderWidth: 1,
-    borderColor: COLORS.stone200,
+    borderWidth: 1.5,
+    borderColor: COLORS.borderLight,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.03,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.02,
     shadowRadius: 10,
     elevation: 2,
   },
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: COLORS.stone900,
-    marginBottom: 12,
+    fontSize: 16,
+    fontWeight: '800',
+    color: COLORS.textMain,
+    marginBottom: 10,
+    letterSpacing: -0.3,
   },
   descriptionText: {
-    fontSize: 14,
-    color: COLORS.stone600,
-    lineHeight: 22,
-    marginBottom: 16,
+    fontSize: 13,
+    color: COLORS.textMuted,
+    lineHeight: 20,
+    marginBottom: 18,
+    fontWeight: '500',
   },
   infoGrid: {
     flexDirection: 'row',
-    marginBottom: 16,
+    marginBottom: 20,
     gap: 16,
   },
   infoItem: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 10,
   },
   iconCircle: {
     width: 32,
     height: 32,
-    borderRadius: 16,
-    backgroundColor: COLORS.backgroundLight,
+    borderRadius: 10,
+    backgroundColor: '#F8FAFC',
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
   infoLabel: {
-    fontSize: 10,
-    fontWeight: 'bold',
-    color: COLORS.stone400,
+    fontSize: 9,
+    fontWeight: '800',
+    color: COLORS.textLight,
     textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   infoValue: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: COLORS.stone600,
+    fontSize: 11,
+    fontWeight: '800',
+    color: COLORS.textMain,
+    marginTop: 2,
   },
   mapContainer: {
-    height: 128,
-    borderRadius: 12,
+    height: 140,
+    borderRadius: 14,
     overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: COLORS.stone200,
-  },
-  mapImage: {
-    width: '100%',
-    height: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  mapPin: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: COLORS.primary,
-    borderWidth: 2,
-    borderColor: '#fff',
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-  },
-  viewMapBtn: {
-    position: 'absolute',
-    bottom: 8,
-    right: 8,
-    backgroundColor: 'rgba(255,255,255,0.9)',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 4,
-  },
-  viewMapText: {
-    fontSize: 10,
-    fontWeight: 'bold',
-    color: COLORS.stone900,
+    borderWidth: 1.5,
+    borderColor: COLORS.borderLight,
+    position: 'relative',
   },
 });
 

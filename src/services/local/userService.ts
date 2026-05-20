@@ -1,4 +1,4 @@
-import db from '../database/database';
+import db from '../../database/database';
 import * as Crypto from 'expo-crypto';
 
 export interface User {
@@ -6,6 +6,7 @@ export interface User {
   firebase_uid?: string;
   full_name: string;
   email: string;
+  username?: string;
   role: string;
   password_hash?: string;
   created_at?: string;
@@ -15,8 +16,17 @@ export interface User {
 export const createUser = (user: User): Promise<number> => {
   try {
     const result = db.runSync(
-      `INSERT INTO users (firebase_uid, full_name, email, role, password_hash, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [user.firebase_uid, user.full_name, user.email, user.role, user.password_hash, user.created_at, user.updated_at]
+      `INSERT INTO users (firebase_uid, full_name, email, username, role, password_hash, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        user.firebase_uid ?? null,
+        user.full_name,
+        user.email,
+        user.username ?? null,
+        user.role,
+        user.password_hash ?? null,
+        user.created_at ?? null,
+        user.updated_at ?? null
+      ]
     );
     return Promise.resolve(result.lastInsertRowId);
   } catch (error) {
@@ -40,12 +50,21 @@ export const getUserByEmail = (email: string): User | null => {
   return result || null;
 };
 
+export const getUserByUsername = (username: string): User | null => {
+  const result = db.getFirstSync<User>(
+    `SELECT * FROM users WHERE username = ?`,
+    [username]
+  );
+  return result || null;
+};
+
 export const updateUser = (userId: number, user: Partial<User>): Promise<void> => {
   try {
     const fields: string[] = [];
     const values: any[] = [];
     if (user.full_name) { fields.push('full_name = ?'); values.push(user.full_name); }
     if (user.email) { fields.push('email = ?'); values.push(user.email); }
+    if (user.username) { fields.push('username = ?'); values.push(user.username); }
     if (user.role) { fields.push('role = ?'); values.push(user.role); }
     if (user.password_hash) { fields.push('password_hash = ?'); values.push(user.password_hash); }
     if (user.updated_at) { fields.push('updated_at = ?'); values.push(user.updated_at); }
@@ -68,10 +87,14 @@ export const deleteUser = (userId: number): void => {
   );
 };
 
-export const loginUserOffline = async (email: string, password: string): Promise<User> => {
-  const user = getUserByEmail(email);
+export const loginUserOffline = async (identifier: string, password: string): Promise<User> => {
+  let user = getUserByEmail(identifier);
+  if (!user && !identifier.includes('@')) {
+    user = getUserByUsername(identifier);
+  }
+
   if (!user || !user.password_hash) {
-    throw new Error('Invalid email or password');
+    throw new Error('Invalid email, username, or password');
   }
 
   // Hash the input password and compare with stored hash
@@ -81,17 +104,25 @@ export const loginUserOffline = async (email: string, password: string): Promise
   );
 
   if (inputHash !== user.password_hash) {
-    throw new Error('Invalid email or password');
+    throw new Error('Invalid email, username, or password');
   }
 
   return { ...user, role: user.role };
 };
 
-export const createUserOffline = async (userData: { full_name: string; email: string; password: string; role: string }): Promise<number> => {
-  // Check if user already exists
+export const createUserOffline = async (userData: { full_name: string; email: string; username?: string; password: string; role: string }): Promise<number> => {
+  // Check if email already exists
   const existingUser = getUserByEmail(userData.email);
   if (existingUser) {
     throw new Error('Email already registered');
+  }
+
+  // Check if username already exists
+  if (userData.username) {
+    const existingUserByUsername = getUserByUsername(userData.username);
+    if (existingUserByUsername) {
+      throw new Error('Username already registered');
+    }
   }
 
   // Ensure password is a string
@@ -109,6 +140,7 @@ export const createUserOffline = async (userData: { full_name: string; email: st
   const user: User = {
     full_name: userData.full_name,
     email: userData.email,
+    username: userData.username,
     role: userData.role || 'user',
     password_hash: passwordHash,
     created_at: new Date().toISOString(),

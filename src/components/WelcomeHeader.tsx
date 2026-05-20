@@ -4,13 +4,11 @@ import { COLORS } from '../constants';
 
 type Props = {
   userName: string;
-  // accept either a local image source or a remote uri string via avatarUrl
   avatar?: ImageSourcePropType;
   avatarUrl?: string;
 };
 
 const WelcomeHeader: React.FC<Props> = ({ userName, avatar, avatarUrl }) => {
-  // fallback local avatar if none provided
   const fallback = require('../assets/images/splash-icon.jpg');
 
   let source: any = avatar ?? fallback;
@@ -19,12 +17,12 @@ const WelcomeHeader: React.FC<Props> = ({ userName, avatar, avatarUrl }) => {
   return (
     <View style={styles.container}>
       <View style={styles.content}>
-        <Text style={styles.greeting}>
+        <Text style={styles.greeting} numberOfLines={1}>
           Hello, {userName} <Text style={styles.wave}>👋</Text>
         </Text>
-        <Text style={styles.subtitle}>Here are your saved journeys and favorite places.</Text>
+        <Text style={styles.subtitle}>Let's discover your next adventure.</Text>
       </View>
-      <View style={styles.avatar}>
+      <View style={styles.avatarBorder}>
         {source ? (
           <Image source={source} style={styles.avatarImage} />
         ) : (
@@ -38,15 +36,63 @@ const WelcomeHeader: React.FC<Props> = ({ userName, avatar, avatarUrl }) => {
 };
 
 const styles = StyleSheet.create({
-  container: { flexDirection: 'row', paddingHorizontal: 20, paddingVertical: 16, marginTop: 40, alignItems: 'flex-start', justifyContent: 'space-between' },
-  content: { flex: 1, marginRight: 12 },
-  greeting: { fontSize: 24, fontWeight: '700', color: '#0A0A0A', marginBottom: 6 },
-  wave: { fontSize: 28 },
-  subtitle: { fontSize: 14, color: '#666', lineHeight: 20 },
-  avatar: { width: 60, height: 60, borderRadius: 30, overflow: 'hidden' },
-  avatarImage: { width: 60, height: 60 },
-  avatarPlaceholder: { width: 60, height: 60, backgroundColor: COLORS.orange, justifyContent: 'center', alignItems: 'center' },
-  avatarText: { fontSize: 24, fontWeight: '700', color: '#fff' },
+  container: { 
+    flexDirection: 'row', 
+    paddingHorizontal: 24, 
+    paddingVertical: 20, 
+    alignItems: 'center', 
+    justifyContent: 'space-between',
+    backgroundColor: COLORS.background,
+  },
+  content: { 
+    flex: 1, 
+    marginRight: 16 
+  },
+  greeting: { 
+    fontSize: 26, 
+    fontWeight: '800', 
+    color: COLORS.textMain, 
+    marginBottom: 4,
+    letterSpacing: -0.5,
+  },
+  wave: { 
+    fontSize: 24 
+  },
+  subtitle: { 
+    fontSize: 14, 
+    color: COLORS.textMuted, 
+    lineHeight: 20,
+    fontWeight: '500',
+  },
+  avatarBorder: { 
+    width: 54, 
+    height: 54, 
+    borderRadius: 27, 
+    borderWidth: 2,
+    borderColor: COLORS.primaryLight,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  avatarImage: { 
+    width: '100%', 
+    height: '100%' 
+  },
+  avatarPlaceholder: { 
+    width: '100%', 
+    height: '100%', 
+    backgroundColor: COLORS.primary, 
+    justifyContent: 'center', 
+    alignItems: 'center' 
+  },
+  avatarText: { 
+    fontSize: 22, 
+    fontWeight: '800', 
+    color: '#fff' 
+  },
 });
 
 export default WelcomeHeader;

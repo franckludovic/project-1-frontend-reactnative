@@ -6,19 +6,18 @@ import {
   SafeAreaView,
   ScrollView,
   TouchableOpacity,
-  Dimensions,
   Alert,
   ActivityIndicator,
 } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
-import Icon from 'react-native-vector-icons/MaterialIcons';
-import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import { COLORS } from '../constants';
 import { useAuth } from '../context/AuthContext';
-import { createNote, CreateNoteData } from '../services/noteApi';
-import { createNote as createNoteLocal } from '../services/noteService';
+import { createNote, CreateNoteData } from '../services/online/noteApi';
+import { createNote as createNoteLocal } from '../services/local/noteService';
+import { addNotePhoto } from '../services/local/photoService';
 
 // Components
 import TitleInput from '../components/AddNote/TitleInput';
@@ -28,11 +27,8 @@ import NotesInput from '../components/AddNote/NotesInput';
 import SaveButton from '../components/AddNote/SaveButton';
 import Header from '../components/Header';
 
-
-
-// Types
 type Place = {
-  id: string;
+  id: number;
   title: string;
   latitude: number;
   longitude: number;
@@ -44,7 +40,6 @@ type Photo = { uri: string };
 const AddNoteScreen: React.FC = () => {
   const { user, tokens, authMode } = useAuth();
   const { place: placeParam } = useLocalSearchParams<{ place: string }>();
-
   const [place, setPlace] = useState<Place | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -67,7 +62,15 @@ const AddNoteScreen: React.FC = () => {
 
     try {
       const parsedPlace = JSON.parse(placeParam);
-      setPlace(parsedPlace);
+      const normalizedPlace: Place = {
+        id: parsedPlace.place_id, 
+        title: parsedPlace.title,
+        latitude: parsedPlace.latitude,
+        longitude: parsedPlace.longitude,
+        image_url: parsedPlace.image,
+      };
+
+      setPlace(normalizedPlace);
 
       const safePhotos: Photo[] = [];
       if (parsedPlace.image) {
@@ -87,7 +90,6 @@ const AddNoteScreen: React.FC = () => {
       setTimestamp(new Date());
       setLocationEnabled(true);
 
-      // Try to get address from coordinates
       Location.reverseGeocodeAsync({
         latitude: parsedPlace.latitude,
         longitude: parsedPlace.longitude,
@@ -104,7 +106,6 @@ const AddNoteScreen: React.FC = () => {
     }
   }, [placeParam]);
 
-  // Image picking functions
   const openCamera = async () => {
     const { granted } = await ImagePicker.requestCameraPermissionsAsync();
     if (!granted) return Alert.alert('Permission required');
@@ -138,7 +139,6 @@ const AddNoteScreen: React.FC = () => {
     }
   };
 
-  // Location functions
   const toggleLocation = async () => {
     if (locationEnabled) {
       setLocationEnabled(false);
@@ -166,7 +166,6 @@ const AddNoteScreen: React.FC = () => {
     setLocationEnabled(true);
   };
 
-  // Save function
   const saveNote = async () => {
     if (!place || !user) return;
 
@@ -178,10 +177,9 @@ const AddNoteScreen: React.FC = () => {
       }
 
       if (authMode === 'offline') {
-        // Use local service for offline mode
         const noteData = {
           user_id: Number(userId),
-          place_id: parseInt(place.id, 10),
+          place_id: Number(place.id),
           title: title,
           content: notes,
           latitude: coords?.latitude || place.latitude,
@@ -190,22 +188,31 @@ const AddNoteScreen: React.FC = () => {
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         };
+        
+        const result = await createNoteLocal(noteData);
 
-        await createNoteLocal(noteData);
+        for (let i = 0; i < photos.length; i++) {
+          await addNotePhoto({
+            note_id: result,
+            photo_url: photos[i].uri,
+            display_order: i,
+            synched: 0,
+            created_at: new Date().toISOString(),
+          });
+        }
       } else {
-        // Use API service for online mode
         if (!tokens?.accessToken) return;
 
         const noteData: CreateNoteData = {
           user_id: Number(userId),
-          place_id: parseInt(place.id, 10),
+          place_id: place.id,
           title: title,
           content: notes,
           latitude: coords?.latitude || place.latitude,
           longitude: coords?.longitude || place.longitude,
           photos: photos.map((photo, index) => ({
             photo_url: photo.uri,
-            local_path: null, // For now, not handling local paths
+            local_path: null,
             display_order: index
           }))
         };
@@ -219,43 +226,37 @@ const AddNoteScreen: React.FC = () => {
       console.error('Save note error:', err);
       Alert.alert('Error', 'Failed to save note');
     }
-
   };
+
+  const renderHeaderLeft = () => (
+    <TouchableOpacity onPress={() => router.back()} style={styles.backButton} activeOpacity={0.7}>
+      <Ionicons name="arrow-back" size={24} color={COLORS.textMain} />
+    </TouchableOpacity>
+  );
+
+  const renderHeaderRight = () => (
+    <TouchableOpacity style={styles.viewAllPill} activeOpacity={0.8} onPress={() => router.push('/notes')}>
+      <Text style={styles.viewAllText}>View All</Text>
+    </TouchableOpacity>
+  );
 
   if (loading) {
     return (
       <SafeAreaView style={styles.center}>
-        <ActivityIndicator size="large" color={COLORS.primaryNote} />
+        <ActivityIndicator size="large" color={COLORS.primary} />
       </SafeAreaView>
     );
   }
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Custom Header */}
       <Header
-        leftContent={
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-            <Icon name="arrow-back" size={24} color={COLORS.textMain} />
-          </TouchableOpacity>
-        }
-        centerContent={
-          <Text style={styles.headerTitle}>New Note</Text>
-        }
-        rightContent={
-          <TouchableOpacity style={styles.viewAllPill}>
-            <Text style={styles.viewAllText}>View All</Text>
-          </TouchableOpacity>
-        }
-        containerStyle={{
-          marginTop: 20,
-          backgroundColor: COLORS.surfaceLight,
-          borderBottomWidth: 1,
-          borderBottomColor: COLORS.stone200,
-        }}
+        leftContent={renderHeaderLeft()}
+        centerContent={<Text style={styles.headerTitle}>New Note</Text>}
+        rightContent={renderHeaderRight()}
+        containerStyle={styles.headerBorder}
       />
 
-      {/* Main Content */}
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
         <View style={styles.content}>
           {/* Title Input */}
@@ -291,7 +292,6 @@ const AddNoteScreen: React.FC = () => {
 
           {/* Notes Input */}
           <NotesInput value={notes} onChangeText={setNotes} />
-
         </View>
       </ScrollView>
 
@@ -304,52 +304,48 @@ const AddNoteScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    marginTop: 0,
-    backgroundColor: COLORS.backgroundLight,
+    backgroundColor: COLORS.background,
   },
   center: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: COLORS.backgroundLight,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    marginTop: 20,
-    backgroundColor: COLORS.surfaceLight,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.stone200,
+    backgroundColor: COLORS.background,
   },
   backButton: {
-    padding: 8,
+    padding: 4,
   },
   headerTitle: {
     fontSize: 18,
-    fontWeight: 'bold',
+    fontWeight: '800',
     color: COLORS.textMain,
+    letterSpacing: -0.3,
+  },
+  headerBorder: {
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.borderLight,
+    backgroundColor: COLORS.background,
   },
   viewAllPill: {
-    backgroundColor: COLORS.primaryNote,
+    backgroundColor: COLORS.primaryLight,
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 16,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 90, 54, 0.1)',
   },
   viewAllText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#fff',
+    fontSize: 11,
+    fontWeight: '800',
+    color: COLORS.primary,
   },
   scrollView: {
     flex: 1,
-    marginTop: 0,
   },
   content: {
     paddingHorizontal: 24,
     paddingBottom: 120,
+    paddingTop: 16,
   },
 });
 

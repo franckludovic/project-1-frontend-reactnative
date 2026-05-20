@@ -1,14 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, ScrollView, ActivityIndicator, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, SafeAreaView, ActivityIndicator } from 'react-native';
 import * as Location from 'expo-location';
 import { router } from 'expo-router';
 import { COLORS } from '../constants';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
-import { getNotesByUserId } from '../services/noteService';
+import { getNotesByUserId } from '../services/local/noteService';
 import Header from '../components/Header';
-import SearchBar from '../components/SearchBar';
-import FilterChips from '../components/notepage/FilterChips';
 import NotesList from '../components/notepage/NotesList';
 
 type Tag = {
@@ -81,7 +79,6 @@ const NotesScreen: React.FC = () => {
       let notesData = [];
 
       if (authMode === 'offline') {
-        // Use local service for offline mode
         const userId = typeof user === 'object' ? (user.user_id || user.id) : user;
         if (!userId) {
           setLoading(false);
@@ -89,7 +86,6 @@ const NotesScreen: React.FC = () => {
         }
         notesData = await getNotesByUserId(Number(userId));
       } else {
-        // Use API service for online mode
         if (!tokens?.accessToken) {
           setLoading(false);
           return;
@@ -108,7 +104,6 @@ const NotesScreen: React.FC = () => {
         }
       }
 
-      // Transform data to component format
       const transformedNotes: Note[] = await Promise.all(notesData.map(async (note: any) => {
         const locationName = await getLocationName(note.latitude, note.longitude);
         return {
@@ -131,28 +126,17 @@ const NotesScreen: React.FC = () => {
     }
   };
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric'
-    });
-  };
-
   const generateTags = (note: any): Tag[] => {
     const tags: Tag[] = [];
     if (note.place?.title) {
-      tags.push({ label: `#${note.place.title}`, color: '#FFA500' }); // Orange
+      tags.push({ label: `#${note.place.title}`, color: COLORS.primary });
     }
-    // Add more tags based on data
     return tags;
   };
 
   const filterNotes = () => {
     let filtered = notes;
 
-    // Apply search
     if (searchQuery) {
       filtered = filtered.filter(note =>
         note.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -161,7 +145,6 @@ const NotesScreen: React.FC = () => {
       );
     }
 
-    // Apply filter
     switch (selectedFilter) {
       case 'synched':
         filtered = filtered.filter(note => note.synched);
@@ -192,9 +175,9 @@ const NotesScreen: React.FC = () => {
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
-        <Header centerContent={<Text style={styles.headerTitle}>My Notes</Text>} />
+        <Header centerContent={<Text style={styles.headerTitle}>My Journal</Text>} />
         <View style={styles.center}>
-          <ActivityIndicator size="large" color={COLORS.orange} />
+          <ActivityIndicator size="large" color={COLORS.primary} />
         </View>
       </SafeAreaView>
     );
@@ -202,21 +185,17 @@ const NotesScreen: React.FC = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <Header centerContent={<Text style={styles.headerTitle}>Your Travel Notes</Text>} />
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-        <SearchBar
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-        />
-        <FilterChips
-          selectedFilter={selectedFilter}
-          onFilterChange={setSelectedFilter}
-        />
-        <NotesList
-          notes={filteredNotes}
-          onNotePress={handleNotePress}
-        />
-      </ScrollView>
+      <Header centerContent={<Text style={styles.headerTitle}>My Journal</Text>} />
+      <NotesList
+        notes={filteredNotes}
+        onNotePress={handleNotePress}
+        searchQuery={searchQuery}
+        onSearchChange={setSearchQuery}
+        selectedFilter={selectedFilter}
+        onFilterChange={setSelectedFilter}
+        refreshing={refreshing}
+        onRefresh={onRefresh}
+      />
     </SafeAreaView>
   );
 };
@@ -224,15 +203,13 @@ const NotesScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.backgroundLight,
+    backgroundColor: COLORS.background,
   },
   headerTitle: {
     fontSize: 18,
-    fontWeight: 'bold',
+    fontWeight: '800',
     color: COLORS.textMain,
-  },
-  scrollView: {
-    flex: 1,
+    letterSpacing: -0.3,
   },
   center: {
     flex: 1,

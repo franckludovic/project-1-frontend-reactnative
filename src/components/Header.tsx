@@ -1,5 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { COLORS } from '../constants';
 
 interface HeaderProps {
   leftContent?: React.ReactNode;
@@ -20,26 +22,83 @@ const Header: React.FC<HeaderProps> = ({
 }) => {
   return (
     <View style={[styles.container, containerStyle]}>
-      <TouchableOpacity style={styles.left} onPress={onLeftPress} disabled={!onLeftPress}>
-        {leftContent || <View style={styles.logo} />}
+      <TouchableOpacity 
+        style={styles.left} 
+        onPress={onLeftPress} 
+        disabled={!onLeftPress}
+        activeOpacity={0.7}
+      >
+        {leftContent || (
+          <View style={styles.brandContainer}>
+            <View style={styles.logoFrame}>
+              <Ionicons name="compass" size={22} color="#fff" />
+            </View>
+            <Text style={styles.brandName}>TravelBuddy</Text>
+          </View>
+        )}
       </TouchableOpacity>
+      
       <View style={styles.center}>
         {centerContent}
       </View>
-      <TouchableOpacity style={styles.right} onPress={onRightPress} disabled={!onRightPress}>
-        {rightContent || <View style={styles.icon} />}
+      
+      <TouchableOpacity 
+        style={styles.right} 
+        onPress={onRightPress} 
+        disabled={!onRightPress}
+        activeOpacity={0.7}
+      >
+        {rightContent}
       </TouchableOpacity>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16 },
-  left: { flexDirection: 'row', alignItems: 'center' },
-  center: { flex: 1, alignItems: 'center' },
-  logo: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#F08A2D' },
-  right: {},
-  icon: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#111' },
+  container: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    justifyContent: 'space-between', 
+    paddingHorizontal: 24,
+    paddingVertical: 16,
+    backgroundColor: COLORS.background,
+  },
+  left: { 
+    flexDirection: 'row', 
+    alignItems: 'center' 
+  },
+  brandContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  logoFrame: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: COLORS.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  brandName: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: COLORS.textMain,
+    letterSpacing: -0.3,
+  },
+  center: { 
+    flex: 1, 
+    alignItems: 'center' 
+  },
+  right: {
+    minWidth: 36,
+    alignItems: 'flex-end',
+  },
 });
 
 export default Header;

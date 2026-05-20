@@ -8,13 +8,14 @@ import {
   Alert,
 } from 'react-native';
 import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
-import { getPlaceById as getPlaceByIdApi } from '../services/placeApi';
-import { getNotesByPlaceId as getNotesByPlaceIdApi } from '../services/noteApi';
-import { getPlaceById } from '../services/placeService';
-import { getNotesByPlaceId } from '../services/noteService';
-import { getPlacePhotos, type PlacePhoto } from '../services/photoService';
+import { getPlaceById as getPlaceByIdApi } from '../services/online/placeApi';
+import { getNotesByPlaceId as getNotesByPlaceIdApi } from '../services/online/noteApi';
+import { getPlaceById } from '../services/local/placeService';
+import { getNotesByPlaceId } from '../services/local/noteService';
+import { getPlacePhotos, type PlacePhoto } from '../services/local/photoService';
 import { useAuth } from '../context/AuthContext';
 import { STATIC_BASE_URL } from '../config/config';
+import { COLORS } from '../constants';
 
 
 // Components
@@ -25,26 +26,7 @@ import AboutSection from '../components/detailsPage/AboutSection';
 import NotesSection from '../components/detailsPage/NotesSection';
 import CommunityTipsSection from '../components/detailsPage/CommunityTipsSection';
 
-// Colors extracted from the HTML Tailwind Config
-const COLORS = {
-  primary: '#fb923c',
-  primaryDark: '#ea580c',
-  backgroundLight: '#fafaf9',
-  surfaceLight: '#ffffff',
-  surfaceDark: '#292524',
-  stone900: '#1c1917',
-  stone600: '#57534e',
-  stone400: '#a8a29e',
-  stone200: '#e7e5e4',
-  amber50: '#fffbeb',
-  amber100: '#fef3c7',
-  amber600: '#d97706',
-  emerald50: '#ecfdf5',
-  emerald100: '#d1fae5',
-  emerald500: '#10b981',
-  emerald600: '#059669',
-  emerald700: '#047857',
-};
+// Using global COLORS from constants
 
 type Note = {
   note_id: number;
@@ -202,10 +184,17 @@ useEffect(() => {
 
   const handleAddNote = () => {
     setNavigating(true);
+
+    // Include the primary photo URL in the place data for the AddNote screen
+    const placeWithImage = {
+      ...parsedPlace,
+      image: placePhotos.length > 0 ? placePhotos[0].photo_url : null,
+    };
+
     router.push({
       pathname: '/AddNote',
       params: {
-        place: JSON.stringify(parsedPlace),
+        place: JSON.stringify(placeWithImage),
       },
     });
   };

@@ -12,7 +12,7 @@ type FavoriteItem = {
   favId: number;     // fav_id
   title: string;
   location?: string;
-  imageSource: any;
+  imageUrl?: string;
   isFavorite: boolean;
   date?: string;
   synched?: boolean;
@@ -22,6 +22,8 @@ type Props = {
   favorites: FavoriteItem[];
   onToggleFavorite: (favId: number) => void;
   onPress: (placeId: number) => void;
+  ListHeaderComponent?: React.ComponentType<any> | React.ReactElement | null;
+  refreshControl?: any;
 };
 
 const FavoriteCardWrapper: React.FC<{ item: FavoriteItem; onPress: () => void; onFavoritePress: () => void }> = ({
@@ -34,7 +36,7 @@ const FavoriteCardWrapper: React.FC<{ item: FavoriteItem; onPress: () => void; o
       key={item.id}
       title={item.title}
       location={item.location}
-      imageSource={item.imageSource}
+      imageUrl={item.imageUrl}
       onPress={onPress}
       onFavoritePress={onFavoritePress}
       isFavorite={item.isFavorite}
@@ -45,12 +47,12 @@ const FavoriteCardWrapper: React.FC<{ item: FavoriteItem; onPress: () => void; o
   </View>
 );
 
-const FavoritesList: React.FC<Props> = ({ favorites, onToggleFavorite, onPress }) => {
+const FavoritesList: React.FC<Props> = ({ favorites, onToggleFavorite, onPress, ListHeaderComponent, refreshControl }) => {
   const renderItem = ({ item }: { item: FavoriteItem }) => (
     <FavoriteCardWrapper
       item={item}
-      onPress={() => onPress(item.id)}              // ✅ place_id for navigation
-      onFavoritePress={() => onToggleFavorite(item.favId)} // ✅ fav_id for deletion
+      onPress={() => onPress(item.id)}
+      onFavoritePress={() => onToggleFavorite(item.favId)}
     />
   );
 
@@ -62,6 +64,8 @@ const FavoritesList: React.FC<Props> = ({ favorites, onToggleFavorite, onPress }
         keyExtractor={(item) => item.favId.toString()}
         numColumns={2}
         contentContainerStyle={styles.listContainer}
+        ListHeaderComponent={ListHeaderComponent}
+        refreshControl={refreshControl}
       />
     </View>
   );

@@ -7,6 +7,7 @@ import FeaturesList from '../components/FeaturesList';
 import Testimonial from '../components/Testimonial';
 import CTA from '../components/CTA';
 import Footer from '../components/Footer';
+import { COLORS } from '../constants';
 
 type Props = {
   onGetStarted?: () => void;
@@ -15,7 +16,7 @@ type Props = {
 
 const HomeScreen: React.FC<Props> = ({ onGetStarted, onViewDemo }) => {
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: '#fff' }}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: COLORS.background }}>
       <ScrollView contentContainerStyle={styles.scroll}>
 
         <Header />

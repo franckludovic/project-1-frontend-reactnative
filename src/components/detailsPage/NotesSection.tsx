@@ -7,31 +7,10 @@ import {
   TouchableOpacity,
   Image,
   ActivityIndicator,
-  Alert,
 } from 'react-native';
-import Icon from 'react-native-vector-icons/MaterialIcons';
+import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-
-// Colors extracted from the HTML Tailwind Config
-const COLORS = {
-  primary: '#fb923c',
-  primaryDark: '#ea580c',
-  backgroundLight: '#fafaf9',
-  surfaceLight: '#ffffff',
-  surfaceDark: '#292524',
-  stone900: '#1c1917',
-  stone600: '#57534e',
-  stone400: '#a8a29e',
-  stone200: '#e7e5e4',
-  amber50: '#fffbeb',
-  amber100: '#fef3c7',
-  amber600: '#d97706',
-  emerald50: '#ecfdf5',
-  emerald100: '#d1fae5',
-  emerald500: '#10b981',
-  emerald600: '#059669',
-  emerald700: '#047857',
-};
+import { COLORS } from '../../constants';
 
 type Note = {
   note_id: number;
@@ -66,11 +45,10 @@ const NotesSection: React.FC<NotesSectionProps> = ({ notes, loadingNotes, onAddN
 
   return (
     <>
-      {/* --- NOTES SECTION --- */}
       <View style={styles.sectionHeaderRow}>
         <Text style={styles.sectionTitleLarge}>Your Notes</Text>
-        <TouchableOpacity style={styles.addBtnSmall} onPress={onAddNote}>
-          <Icon name="add" size={20} color={COLORS.primary} />
+        <TouchableOpacity style={styles.addBtnSmall} onPress={onAddNote} activeOpacity={0.8}>
+          <Ionicons name="add" size={18} color={COLORS.primary} />
         </TouchableOpacity>
       </View>
 
@@ -82,21 +60,24 @@ const NotesSection: React.FC<NotesSectionProps> = ({ notes, loadingNotes, onAddN
           </View>
         ) : notes.length === 0 ? (
           <View style={styles.emptyNotesContainer}>
-            <Icon name="note" size={48} color={COLORS.stone200} />
+            <View style={styles.emptyIconCircle}>
+              <Ionicons name="document-text-outline" size={26} color={COLORS.textLight} />
+            </View>
             <Text style={styles.emptyNotesText}>No notes yet</Text>
-            <Text style={styles.emptyNotesSubtext}>Add your first note about this place!</Text>
+            <Text style={styles.emptyNotesSubtext}>Add photos and thoughts about this place!</Text>
           </View>
         ) : (
           notes.map((note) => (
             <TouchableOpacity
               key={note.note_id}
-              style={note.photos && note.photos.length > 0 ? styles.noteCardAmber : styles.noteCardWhite}
+              style={note.photos && note.photos.length > 0 ? styles.noteCardPrimary : styles.noteCardWhite}
               onPress={() => {
                 router.push({
                   pathname: "/note/[noteId]",
                   params: { noteId: note.note_id.toString() },
                 });
               }}
+              activeOpacity={0.9}
             >
               {note.photos && note.photos.length > 0 ? (
                 <>
@@ -106,7 +87,7 @@ const NotesSection: React.FC<NotesSectionProps> = ({ notes, loadingNotes, onAddN
                   />
                   <View style={styles.noteTextContainer}>
                     <Text style={styles.noteDate}>
-                      NOTE • {formatDate(note.created_at).toUpperCase()}
+                      {formatDate(note.created_at).toUpperCase()}
                     </Text>
                     {note.title && (
                       <Text style={styles.noteTitle} numberOfLines={1}>
@@ -125,12 +106,19 @@ const NotesSection: React.FC<NotesSectionProps> = ({ notes, loadingNotes, onAddN
                 </>
               ) : (
                 <>
-                  <Icon name="note" size={24} color={COLORS.stone400} style={{ marginBottom: 8 }} />
+                  <View style={styles.plainNoteHeader}>
+                    <Ionicons name="document-text" size={20} color={COLORS.primary} />
+                    <Text style={styles.noteDateGray}>
+                      {formatDate(note.created_at)}
+                    </Text>
+                  </View>
+                  {note.title && (
+                    <Text style={styles.noteTitleText} numberOfLines={1}>
+                      {note.title}
+                    </Text>
+                  )}
                   <Text style={styles.noteBodyGray} numberOfLines={3}>
                     {note.content}
-                  </Text>
-                  <Text style={styles.noteDateGray}>
-                    {formatDate(note.created_at)}
                   </Text>
                 </>
               )}
@@ -148,18 +136,19 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 24,
-    marginBottom: 16,
+    marginBottom: 14,
   },
   sectionTitleLarge: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: COLORS.stone900,
+    fontSize: 16,
+    fontWeight: '800',
+    color: COLORS.textMain,
+    letterSpacing: -0.3,
   },
   addBtnSmall: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: COLORS.backgroundLight,
+    width: 30,
+    height: 30,
+    borderRadius: 8,
+    backgroundColor: COLORS.primaryLight,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -168,69 +157,84 @@ const styles = StyleSheet.create({
     marginBottom: 32,
   },
   notesContent: {
-    paddingRight: 24, // End padding
+    paddingRight: 24,
   },
-  noteCardAmber: {
+  noteCardPrimary: {
     width: 260,
-    backgroundColor: COLORS.amber50,
+    backgroundColor: COLORS.primaryLight,
     borderRadius: 16,
-    padding: 16,
+    padding: 14,
     borderWidth: 1,
-    borderColor: COLORS.amber100,
+    borderColor: 'rgba(255, 90, 54, 0.1)',
     flexDirection: 'row',
     gap: 12,
-    marginRight: 16,
+    marginRight: 14,
   },
   noteCardWhite: {
     width: 200,
     backgroundColor: COLORS.surfaceLight,
     borderRadius: 16,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: COLORS.stone200,
+    padding: 14,
+    borderWidth: 1.5,
+    borderColor: COLORS.borderLight,
     flexDirection: 'column',
-    marginRight: 16,
+    marginRight: 14,
   },
   noteThumb: {
-    width: 48,
-    height: 48,
-    borderRadius: 8,
+    width: 52,
+    height: 52,
+    borderRadius: 10,
     backgroundColor: '#ddd',
   },
   noteTextContainer: {
     flex: 1,
-    gap: 4,
+    gap: 3,
   },
   noteDate: {
-    fontSize: 10,
-    fontWeight: 'bold',
-    color: COLORS.amber600,
-    textTransform: 'uppercase',
+    fontSize: 9,
+    fontWeight: '800',
+    color: COLORS.primary,
+    letterSpacing: 0.5,
   },
   noteTitle: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: COLORS.stone900,
+    fontSize: 13,
+    fontWeight: '800',
+    color: COLORS.textMain,
   },
   noteBody: {
-    fontSize: 12,
+    fontSize: 11,
+    color: COLORS.textMuted,
+    lineHeight: 15,
     fontWeight: '500',
-    color: COLORS.stone900,
+  },
+  plainNoteHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  noteTitleText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: COLORS.textMain,
+    marginBottom: 4,
   },
   noteBodyGray: {
-    fontSize: 12,
-    color: COLORS.stone600,
+    fontSize: 11,
+    color: COLORS.textMuted,
+    lineHeight: 16,
+    fontWeight: '500',
   },
   noteDateGray: {
-    fontSize: 10,
-    fontWeight: 'bold',
-    color: COLORS.stone400,
-    textTransform: 'uppercase',
+    fontSize: 9,
+    fontWeight: '800',
+    color: COLORS.textLight,
   },
   photoCountText: {
-    fontSize: 10,
-    color: COLORS.stone400,
-    marginTop: 4,
+    fontSize: 9,
+    color: COLORS.textLight,
+    fontWeight: '600',
+    marginTop: 2,
   },
   loadingContainer: {
     flexDirection: 'row',
@@ -240,24 +244,40 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   loadingText: {
-    fontSize: 14,
-    color: COLORS.stone600,
+    fontSize: 13,
+    color: COLORS.textMuted,
+    fontWeight: '500',
   },
   emptyNotesContainer: {
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 40,
-    gap: 8,
+    paddingVertical: 20,
+    paddingHorizontal: 40,
+    borderWidth: 1.5,
+    borderColor: COLORS.borderLight,
+    borderStyle: 'dashed',
+    borderRadius: 16,
+    marginRight: 24,
+  },
+  emptyIconCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: '#F8FAFC',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
   },
   emptyNotesText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: COLORS.stone600,
+    fontSize: 13,
+    fontWeight: '800',
+    color: COLORS.textMain,
   },
   emptyNotesSubtext: {
-    fontSize: 12,
-    color: COLORS.stone400,
+    fontSize: 11,
+    color: COLORS.textMuted,
     textAlign: 'center',
+    fontWeight: '500',
   },
 });
 
