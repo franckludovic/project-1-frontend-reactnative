@@ -106,7 +106,6 @@ export default function HomeTabScreen() {
   return (
     <HomeScreen 
       userName={user && typeof user === 'object' ? (user.full_name || user.username || 'Traveler') : 'Traveler'} 
-      onAddPlace={handleAddPlace} 
       stats={stats}
     />
   );

@@ -53,8 +53,8 @@ export const takePicture = async (): Promise<CameraResult> => {
 };
 
 /**
- * Opens the image library to select a picture.
- * @param allowMultiple Whether to allow multiple image selection
+ * Opens the image library to select a picture or video.
+ * @param allowMultiple Whether to allow multiple selection
  * @returns Promise<CameraResult>
  */
 export const selectFromGallery = async (allowMultiple: boolean = false): Promise<CameraResult> => {
@@ -71,7 +71,7 @@ export const selectFromGallery = async (allowMultiple: boolean = false): Promise
 
     // Launch image library
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes: ImagePicker.MediaTypeOptions.All,
       allowsEditing: !allowMultiple, // Disable editing when multiple selection is enabled
       aspect: allowMultiple ? undefined : [4, 3],
       quality: 0.8,
@@ -101,6 +101,51 @@ export const selectFromGallery = async (allowMultiple: boolean = false): Promise
     }
   } catch (error) {
     console.error('Error selecting image from gallery:', error);
+    return {
+      uri: '',
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    };
+  }
+};
+
+/**
+ * Opens the camera to record a video.
+ * @returns Promise<CameraResult>
+ */
+export const recordVideo = async (): Promise<CameraResult> => {
+  try {
+    // Request camera permissions
+    const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
+    if (permissionResult.granted === false) {
+      return {
+        uri: '',
+        success: false,
+        error: 'Camera permission not granted',
+      };
+    }
+
+    // Launch camera for video
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Videos,
+      allowsEditing: true,
+      quality: 0.8,
+    });
+
+    if (!result.canceled) {
+      return {
+        uri: result.assets[0].uri,
+        success: true,
+      };
+    } else {
+      return {
+        uri: '',
+        success: false,
+        error: 'Video recording was cancelled',
+      };
+    }
+  } catch (error) {
+    console.error('Error recording video:', error);
     return {
       uri: '',
       success: false,

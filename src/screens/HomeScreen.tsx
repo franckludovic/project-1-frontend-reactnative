@@ -224,16 +224,7 @@ const AuthenticatedHomeScreen: React.FC<Props> = ({ userName = 'Traveler', avata
         </View>
       </ScrollView>
 
-      {/* Add Place Floating Action Button */}
-      {onAddPlace && (
-        <TouchableOpacity
-          style={styles.floatingButton}
-          onPress={onAddPlace}
-          activeOpacity={0.85}
-        >
-          <Ionicons name="add" size={30} color="#fff" />
-        </TouchableOpacity>
-      )}
+
     </SafeAreaView>
   );
 };

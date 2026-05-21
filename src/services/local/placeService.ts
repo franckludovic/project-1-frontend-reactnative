@@ -9,6 +9,7 @@ export interface Place {
   image_url?: string;
   local_path?: string;
   synched?: number;
+  visibility?: string;
   created_at?: string;
   updated_at?: string;
   user_id?: number;
@@ -17,12 +18,13 @@ export interface Place {
 export const createPlace = (place: Place): Promise<number> => {
   try {
     const result = db.runSync(
-      `INSERT INTO places (title, description, latitude, longitude, synched, created_at, updated_at, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO places (title, description, latitude, longitude, visibility, synched, created_at, updated_at, user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         place.title,
         place.description || null,
         place.latitude,
         place.longitude,
+        place.visibility || 'public',
         place.synched || 0,
         place.created_at || new Date().toISOString(),
         place.updated_at || new Date().toISOString(),
@@ -79,6 +81,7 @@ export const updatePlace = (placeId: number, place: Partial<Place>): Promise<voi
     if (place.description !== undefined) { fields.push('description = ?'); values.push(place.description); }
     if (place.latitude !== undefined) { fields.push('latitude = ?'); values.push(place.latitude); }
     if (place.longitude !== undefined) { fields.push('longitude = ?'); values.push(place.longitude); }
+    if (place.visibility !== undefined) { fields.push('visibility = ?'); values.push(place.visibility); }
     if (place.synched !== undefined) { fields.push('synched = ?'); values.push(place.synched); }
     if (place.updated_at !== undefined) { fields.push('updated_at = ?'); values.push(place.updated_at); }
     if (place.user_id !== undefined) { fields.push('user_id = ?'); values.push(place.user_id); }
