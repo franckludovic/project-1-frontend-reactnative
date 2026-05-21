@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { router } from 'expo-router';
 import Icon from '@expo/vector-icons/MaterialIcons';
-import { resetDatabase, resetDatabaseInPlace, getDatabaseStats } from '../utils/databaseReset';
+import { resetDatabase, resetDatabaseInPlace, getDatabaseStats, seedDatabaseDemo } from '../utils/databaseReset';
 
 const DebugScreen: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
@@ -161,6 +161,27 @@ const DebugScreen: React.FC = () => {
             <Icon name="refresh" size={20} color="white" />
             <Text style={styles.resetButtonText}>
               {isLoading ? 'Resetting...' : 'Reset Data (Keep File)'}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.resetButton, { backgroundColor: '#10B981' }]}
+            onPress={async () => {
+              setIsLoading(true);
+              const result = await seedDatabaseDemo();
+              if (result.success) {
+                Alert.alert('✅ Success', result.message);
+                await loadStats();
+              } else {
+                Alert.alert('❌ Error', result.error);
+              }
+              setIsLoading(false);
+            }}
+            disabled={isLoading}
+          >
+            <Icon name="add-circle" size={20} color="white" />
+            <Text style={styles.resetButtonText}>
+              {isLoading ? 'Seeding...' : 'Seed Demo Data'}
             </Text>
           </TouchableOpacity>
         </View>

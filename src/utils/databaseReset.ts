@@ -111,6 +111,7 @@ const initializeDatabase = async (): Promise<void> => {
       firebase_uid TEXT,
       full_name TEXT NOT NULL,
       email TEXT UNIQUE NOT NULL,
+      username TEXT UNIQUE,
       role TEXT DEFAULT 'user',
       password_hash TEXT,
       created_at TEXT,
@@ -126,6 +127,7 @@ const initializeDatabase = async (): Promise<void> => {
       description TEXT,
       latitude REAL NOT NULL,
       longitude REAL NOT NULL,
+      visibility TEXT DEFAULT 'public',
       image_url TEXT,
       local_path TEXT,
       synched INTEGER DEFAULT 0,
@@ -133,6 +135,35 @@ const initializeDatabase = async (): Promise<void> => {
       updated_at TEXT,
       user_id INTEGER,
       FOREIGN KEY(user_id) REFERENCES users(user_id) ON DELETE SET NULL ON UPDATE CASCADE
+    );
+  `);
+
+  // Place Photos table
+  db.execSync(`
+    CREATE TABLE IF NOT EXISTS place_photos (
+      photo_id INTEGER PRIMARY KEY AUTOINCREMENT,
+      place_id INTEGER NOT NULL,
+      photo_url TEXT,
+      local_path TEXT,
+      display_order INTEGER DEFAULT 0,
+      synched INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY(place_id) REFERENCES places(place_id) ON DELETE CASCADE ON UPDATE CASCADE
+    );
+  `);
+
+  // Place Videos table
+  db.execSync(`
+    CREATE TABLE IF NOT EXISTS place_videos (
+      video_id INTEGER PRIMARY KEY AUTOINCREMENT,
+      place_id INTEGER NOT NULL,
+      video_url TEXT NOT NULL,
+      thumbnail_url TEXT,
+      duration INTEGER DEFAULT 0,
+      display_order INTEGER DEFAULT 0,
+      synched INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY(place_id) REFERENCES places(place_id) ON DELETE CASCADE ON UPDATE CASCADE
     );
   `);
 
@@ -246,5 +277,70 @@ export const getDatabaseStats = async (): Promise<any> => {
   } catch (error) {
     console.error('Error getting database stats:', error);
     return null;
+  }
+};
+
+/**
+ * Seed database with demo data (Image 11 and test_video_4)
+ */
+export const seedDatabaseDemo = async (): Promise<ResetResult> => {
+  try {
+    const db = SQLite.openDatabaseSync('travelbuddy.db');
+    
+    // Create a demo user if one doesn't exist
+    let userId = 1;
+    const users = db.getAllSync<{user_id: number}>('SELECT user_id FROM users LIMIT 1');
+    if (users.length === 0) {
+      const result = db.runSync(
+        "INSERT INTO users (full_name, email, username) VALUES (?, ?, ?)",
+        ['Demo User', 'demo@example.com', 'demouser']
+      );
+      userId = result.lastInsertRowId;
+    } else {
+      userId = users[0].user_id;
+    }
+
+    // Insert Place 1 (Image)
+    const place1 = db.runSync(
+      "INSERT INTO places (title, description, latitude, longitude, visibility, user_id) VALUES (?, ?, ?, ?, ?, ?)",
+      ['Asian Night Market', 'Vibrant nightlife with amazing food and glowing neon lights.', 35.6895, 139.6917, 'public', userId]
+    );
+    const place1Id = place1.lastInsertRowId;
+    
+    db.runSync(
+      "INSERT INTO place_photos (place_id, photo_url, display_order) VALUES (?, ?, ?)",
+      [place1Id, 'image 11.jpg', 0]
+    );
+    db.runSync(
+      "INSERT INTO place_photos (place_id, photo_url, display_order) VALUES (?, ?, ?)",
+      [place1Id, 'image 12.jpg', 1]
+    );
+    db.runSync(
+      "INSERT INTO place_photos (place_id, photo_url, display_order) VALUES (?, ?, ?)",
+      [place1Id, 'image 10.jpg', 2]
+    );
+
+    // Insert Place 2 (Video)
+    const place2 = db.runSync(
+      "INSERT INTO places (title, description, latitude, longitude, visibility, user_id) VALUES (?, ?, ?, ?, ?, ?)",
+      ['Lekki Beach Sunset', 'The perfect end to a long week. The water was so warm.', 6.4253, 3.5186, 'public', userId]
+    );
+    const place2Id = place2.lastInsertRowId;
+
+    db.runSync(
+      "INSERT INTO place_videos (place_id, video_url, duration, display_order) VALUES (?, ?, ?, ?)",
+      [place2Id, 'test_video_4.mp4', 30, 0]
+    );
+
+    return {
+      success: true,
+      message: 'Demo data seeded successfully!'
+    };
+  } catch (error) {
+    console.error('Error seeding demo data:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error occurred'
+    };
   }
 };

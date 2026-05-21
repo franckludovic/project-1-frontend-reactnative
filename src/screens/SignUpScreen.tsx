@@ -145,21 +145,15 @@ const SignUpScreen: React.FC<Props> = ({ onLogin }) => {
           handleLogin();
         }
       } catch (err: any) {
-        console.log('Online registration failed, trying offline:', err.message);
-        try {
-          // 2. Try offline registration via local SQLite
-          await createUserOffline({
-            full_name: fullName,
-            email,
-            username: cleanUsername,
-            password,
-            role: 'user',
-          });
-
-          await auth.signInOffline({ email, full_name: fullName, username: cleanUsername });
-          router.replace('/home');
-        } catch (offlineErr: any) {
-          setServerError(offlineErr.message || 'Registration failed');
+        // Registration requires internet — inform the user clearly.
+        // We never silently create local accounts during sign-up.
+        const msg = err.message || 'Registration failed.';
+        if (msg.toLowerCase().includes('network') || msg.toLowerCase().includes('fetch')) {
+          setServerError(
+            'No internet connection. Please connect to register your account.\n\nYou can still use the app as a Guest from the Login screen.'
+          );
+        } else {
+          setServerError(msg);
         }
       } finally {
         setLoading(false);

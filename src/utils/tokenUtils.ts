@@ -1,8 +1,8 @@
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 
-// Token types
-export type TokenType = 'pseudo' | 'real';
+// Token types — 'real' = Supabase JWT, 'pseudo' = legacy offline, 'guest' = anonymous guest session
+export type TokenType = 'pseudo' | 'real' | 'guest';
 
 // Token data structure
 export interface TokenData {

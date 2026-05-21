@@ -8,18 +8,16 @@ import {
   ScrollView,
   TouchableOpacity,
   Image,
-  Dimensions
+  Dimensions,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../context/AuthContext';
 import Button from '../components/Button';
 import TextInput from '../components/TextInput';
-import { COLORS, SIZES, SHADOWS } from '../constants';
+import { COLORS, SHADOWS } from '../constants';
 import { supabase } from '../config/supabaseClient';
-import { loginUserOffline } from '../services/local/userService';
 import { Ionicons } from '@expo/vector-icons';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -33,12 +31,23 @@ const LoginScreen: React.FC<Props> = ({ onSignUp }) => {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const { signIn } = useAuth();
+  const { signIn, continueAsGuest, isOnline } = useAuth();
   const router = useRouter();
 
   const handleLogin = async () => {
     if (!identifier.trim() || !password) {
-      Alert.alert('Error', 'Please fill in all fields');
+      Alert.alert('Missing Fields', 'Please enter your username/email and password.');
+      return;
+    }
+
+    // ---- STRICT ONLINE-ONLY LOGIN ----
+    // We do NOT silently fall back to offline mode here.
+    // If the user is offline, we inform them and stop.
+    if (!isOnline) {
+      Alert.alert(
+        'No Connection',
+        'You must be connected to the internet to log in.\n\nIf you want to use the app offline, tap "Continue as Guest" below.',
+      );
       return;
     }
 
@@ -46,7 +55,7 @@ const LoginScreen: React.FC<Props> = ({ onSignUp }) => {
     try {
       let resolvedEmail = identifier.trim();
 
-      // 1. If identifier doesn't look like an email, lookup email from username
+      // If not an email, look up by username
       if (!resolvedEmail.includes('@')) {
         const { data: userRecord, error: lookupError } = await supabase
           .from('users')
@@ -55,12 +64,12 @@ const LoginScreen: React.FC<Props> = ({ onSignUp }) => {
           .maybeSingle();
 
         if (lookupError || !userRecord) {
-          throw new Error('Username not found or invalid');
+          throw new Error('Username not found. Please check and try again.');
         }
         resolvedEmail = userRecord.email;
       }
 
-      // 2. Perform online login via Supabase
+      // Authenticate with Supabase
       const { data, error } = await supabase.auth.signInWithPassword({
         email: resolvedEmail,
         password,
@@ -71,7 +80,6 @@ const LoginScreen: React.FC<Props> = ({ onSignUp }) => {
       if (data.session) {
         const sbUser = data.user;
 
-        // Check if user exists in public.users to get their relational ID
         let publicUser: any = null;
         try {
           const { data: userData } = await supabase
@@ -90,6 +98,7 @@ const LoginScreen: React.FC<Props> = ({ onSignUp }) => {
           email: sbUser.email,
           full_name: publicUser?.full_name || sbUser.user_metadata?.full_name || '',
           role: [publicUser?.role || 'user'],
+          isGuest: false,
         };
 
         const tokens = {
@@ -101,51 +110,28 @@ const LoginScreen: React.FC<Props> = ({ onSignUp }) => {
         router.replace('/home');
       }
     } catch (err: any) {
-      console.log('Online login failed, trying offline:', err.message);
-      try {
-        // 3. Try offline login via local SQLite
-        const user = await loginUserOffline(identifier.trim(), password);
-        await signIn(user);
-        router.replace('/home');
-      } catch (offlineErr: any) {
-        Alert.alert('Login Failed', offlineErr.message || 'Invalid username, email, or password');
-      }
+      // Show the actual server error (wrong password, user not found, etc.)
+      Alert.alert(
+        'Login Failed',
+        err.message || 'Could not log in. Please check your credentials.',
+      );
     } finally {
       setLoading(false);
     }
   };
 
-  const handleOfflineMode = async () => {
+  /**
+   * Guest Mode: Creates/restores a local anonymous profile.
+   * The user can explore the app and create places offline.
+   * When they register later, we offer to migrate their data.
+   */
+  const handleGuestMode = async () => {
     try {
       setLoading(true);
-      // 1. Try to find the last saved user in AsyncStorage
-      const storedOfflineUser = await AsyncStorage.getItem('offline_user');
-      const storedOnlineUser = await AsyncStorage.getItem('online_user');
-      
-      let userToRestore = null;
-      if (storedOfflineUser) {
-        userToRestore = JSON.parse(storedOfflineUser);
-      } else if (storedOnlineUser) {
-        userToRestore = JSON.parse(storedOnlineUser);
-      }
-
-      if (userToRestore && userToRestore.email) {
-        // Sign in using the stored user info
-        await signIn(userToRestore);
-        router.replace('/home');
-      } else {
-        // No registered account found on this device
-        Alert.alert(
-          'No Account Found',
-          'No registered account was found on this device. Please create an account first.',
-          [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Register Now', onPress: () => handleRegisterRedirect() }
-          ]
-        );
-      }
+      await continueAsGuest();
+      router.replace('/home');
     } catch (err: any) {
-      Alert.alert('Offline Mode Error', err.message || 'Could not launch offline mode');
+      Alert.alert('Error', err.message || 'Could not start guest session.');
     } finally {
       setLoading(false);
     }
@@ -162,7 +148,7 @@ const LoginScreen: React.FC<Props> = ({ onSignUp }) => {
   const renderPasswordToggle = () => (
     <TouchableOpacity onPress={() => setShowPassword(!showPassword)} activeOpacity={0.7} style={styles.eyeBtn}>
       <Ionicons
-        name={showPassword ? "eye" : "eye-off"}
+        name={showPassword ? 'eye' : 'eye-off'}
         size={20}
         color="#64748B"
       />
@@ -171,21 +157,21 @@ const LoginScreen: React.FC<Props> = ({ onSignUp }) => {
 
   return (
     <View style={styles.container}>
-      {/* Full screen background landscape image */}
+      {/* Full screen background */}
       <Image
         source={require('../assets/images/image 7.jpg')}
         style={styles.backgroundImage}
         resizeMode="cover"
       />
 
-      {/* Absolute overlay gradient fading seamlessly from solid white at top to transparent at the bottom */}
+      {/* Gradient overlay */}
       <LinearGradient
         colors={[
           '#ffffff',
           '#ffffff',
           'rgba(255, 255, 255, 0.95)',
           'rgba(255, 255, 255, 0.6)',
-          'transparent'
+          'transparent',
         ]}
         locations={[0, 0.25, 0.35, 0.5, 0.72]}
         style={StyleSheet.absoluteFillObject}
@@ -197,12 +183,10 @@ const LoginScreen: React.FC<Props> = ({ onSignUp }) => {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {/* Spacer to push content down */}
           <View style={styles.topSpacer} />
 
-          {/* Main Content Area (transparent background to let gradient show through) */}
           <View style={styles.contentCard}>
-            {/* Logo Container */}
+            {/* Logo */}
             <View style={styles.logoContainer}>
               <Ionicons name="compass" size={32} color="#ffffff" />
             </View>
@@ -213,16 +197,16 @@ const LoginScreen: React.FC<Props> = ({ onSignUp }) => {
             </Text>
 
             <View style={styles.signupPromptRow}>
-              <Text style={styles.promptText}>Don’t have an account? </Text>
+              <Text style={styles.promptText}>Don't have an account? </Text>
               <TouchableOpacity onPress={handleRegisterRedirect} activeOpacity={0.7}>
                 <Text style={styles.promptLink}>Sign Up</Text>
               </TouchableOpacity>
             </View>
 
-            {/* Inputs Form */}
+            {/* Form */}
             <View style={styles.form}>
               <TextInput
-                label="Username"
+                label="Username or Email"
                 placeholder="wanderer_123"
                 value={identifier}
                 onChangeText={setIdentifier}
@@ -241,32 +225,39 @@ const LoginScreen: React.FC<Props> = ({ onSignUp }) => {
               />
 
               <Button
-                title={loading ? 'Logging in...' : 'Log in'}
+                title={loading ? 'Logging in...' : 'Log In'}
                 onPress={handleLogin}
                 disabled={loading}
                 style={styles.loginButton}
               />
 
-              <TouchableOpacity 
-                style={styles.offlineModeButton}
-                onPress={handleOfflineMode}
+              {/* Guest Mode Button */}
+              <TouchableOpacity
+                style={styles.guestButton}
+                onPress={handleGuestMode}
                 activeOpacity={0.7}
+                disabled={loading}
               >
-                <Text style={styles.offlineModeText}>Continue in offline mode</Text>
+                <Ionicons name="person-outline" size={16} color="#64748B" style={{ marginRight: 6 }} />
+                <Text style={styles.guestButtonText}>Continue as Guest</Text>
               </TouchableOpacity>
+
+              <Text style={styles.guestNote}>
+                Guest mode lets you explore and save places offline.{'\n'}
+                You can register later to back up your data to the cloud.
+              </Text>
             </View>
           </View>
 
-          {/* Social login section - styled to fit nicely over the gradient transition zone */}
+          {/* Social login section */}
           <View style={styles.socialSection}>
             <View style={styles.dividerRow}>
               <View style={styles.line} />
-              <Text style={styles.dividerText}>OR Log in WITH</Text>
+              <Text style={styles.dividerText}>OR LOG IN WITH</Text>
               <View style={styles.line} />
             </View>
 
             <View style={styles.socialButtonsRow}>
-              {/* Google Liquid Glass Button */}
               <TouchableOpacity
                 style={styles.socialBtn}
                 activeOpacity={0.8}
@@ -279,7 +270,6 @@ const LoginScreen: React.FC<Props> = ({ onSignUp }) => {
                 </View>
               </TouchableOpacity>
 
-              {/* Apple Liquid Glass Button */}
               <TouchableOpacity
                 style={styles.socialBtn}
                 activeOpacity={0.8}
@@ -379,16 +369,30 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 4 },
   },
-  offlineModeButton: {
+  guestButton: {
     marginTop: 14,
+    flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 8,
+    justifyContent: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: '#E2E8F0',
+    backgroundColor: 'rgba(255,255,255,0.7)',
   },
-  offlineModeText: {
-    color: '#FF5A36',
+  guestButtonText: {
+    color: '#475569',
     fontSize: 14,
     fontWeight: '700',
-    textDecorationLine: 'underline',
+  },
+  guestNote: {
+    marginTop: 10,
+    color: '#94A3B8',
+    fontSize: 12,
+    textAlign: 'center',
+    lineHeight: 18,
+    fontWeight: '500',
   },
   eyeBtn: {
     padding: 4,

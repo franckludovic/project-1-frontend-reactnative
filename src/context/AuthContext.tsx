@@ -16,25 +16,30 @@ type User = {
   accessToken?: string;
   refreshToken?: string;
   role?: string | string[];
-  pseudoToken?: string; // For offline mode
+  pseudoToken?: string;
+  isGuest?: boolean; // <-- NEW: marks a guest/anonymous session
 } | string | null;
 
-type AuthMode = 'offline' | 'online' | 'pending';
+type AuthMode = 'offline' | 'online' | 'guest' | 'pending';
 
 type AuthContextType = {
   user: User;
   tokens: Tokens;
   authMode: AuthMode;
   isOnline: boolean;
+  isGuest: boolean; // <-- easy flag for UI
   signIn: (user: User, tokens?: Tokens) => Promise<void>;
-  signInOffline: (userData: { email: string; full_name?: string; username?: string }) => Promise<void>;
   signInOnline: (user: User, tokens: Tokens) => Promise<void>;
+  continueAsGuest: () => Promise<void>; // <-- NEW: replaces signInOffline
   signOut: () => Promise<void>;
   refreshToken: () => Promise<boolean>;
   isLoading: boolean;
   hasOfflineData: boolean;
   triggerSync: () => Promise<void>;
 };
+
+const GUEST_USER_EMAIL = 'guest@travelbuddy.local';
+const GUEST_USER_KEY = 'guest_user';
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -47,10 +52,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const { isConnected: isOnline } = useNetworkState();
 
+  const isGuest = authMode === 'guest';
+
   // Initialize Auth state on app launch and subscribe to Supabase events
   useEffect(() => {
-    // 1. Initial Offline Check
-    initializeOfflineAuth();
+    // 1. Initial Offline Check (restore cached session if available)
+    initializeAuth();
 
     // 2. Subscribe to Supabase Auth Changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
@@ -60,7 +67,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // User logged in online
         const sbUser = session.user;
 
-        // Fetch user metadata from our public.users table to get their user_id
         let publicUser: any = null;
         try {
           const { data: userData } = await supabase
@@ -72,7 +78,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           if (userData) {
             publicUser = userData;
           } else {
-            // Fallback to checking by email
             const { data: userDataByEmail } = await supabase
               .from('users')
               .select('*')
@@ -86,56 +91,53 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         const finalUser = {
           id: sbUser.id,
-          user_id: publicUser?.user_id || 0, // Maps to our sequential user_id
+          user_id: publicUser?.user_id || 0,
           email: sbUser.email,
           full_name: publicUser?.full_name || sbUser.user_metadata?.full_name || '',
           accessToken: session.access_token,
           refreshToken: session.refresh_token,
           role: [publicUser?.role || 'user'],
+          isGuest: false,
         };
 
         setUser(finalUser);
         setTokens({ accessToken: session.access_token, refreshToken: session.refresh_token });
         setAuthMode('online');
 
-        // Store online user for persistence
         await AsyncStorage.setItem('online_user', JSON.stringify(finalUser));
         const expiresAt = session.expires_at ? new Date(session.expires_at * 1000).toISOString() : undefined;
         const realTokenData = createRealTokenData(session.access_token, finalUser.user_id, finalUser, expiresAt);
         await storeToken(realTokenData);
 
-        // If there was any offline data accumulated, sync it now!
+        // Auto-sync any guest/offline data when user successfully authenticates
         if (hasOfflineData) {
           await triggerSync();
         }
       } else {
-        // No session - check if we are in offline mode or if we are offline with a real token
+        // No Supabase session — check for cached real token (e.g. went offline)
         const storedToken = await getStoredToken();
-        if (storedToken) {
-          if (storedToken.type === 'pseudo') {
-            // Keep offline state
-            const storedUser = await AsyncStorage.getItem('offline_user');
-            if (storedUser) {
-              setUser(JSON.parse(storedUser));
-              setAuthMode('offline');
-              setHasOfflineData(true);
-            }
-          } else if (storedToken.type === 'real' && !isOnline) {
-            // We have a real token but we are offline right now!
-            // Let the user stay logged in in offline mode
-            const storedUser = await AsyncStorage.getItem('online_user');
-            if (storedUser) {
-              setUser(JSON.parse(storedUser));
-              setAuthMode('offline');
-            }
+
+        if (storedToken?.type === 'real' && !isOnline) {
+          // Previously logged in online, now offline — allow access with cached user data
+          const storedUser = await AsyncStorage.getItem('online_user');
+          if (storedUser) {
+            setUser(JSON.parse(storedUser));
+            setAuthMode('offline');
           } else {
-            // Clear everything if online and session is really gone
-            setUser(null);
-            setTokens(null);
+            setAuthMode('pending');
+          }
+        } else if (storedToken?.type === 'guest') {
+          // Restore a previous guest session
+          const guestUser = await AsyncStorage.getItem(GUEST_USER_KEY);
+          if (guestUser) {
+            setUser(JSON.parse(guestUser));
+            setAuthMode('guest');
+            setHasOfflineData(true);
+          } else {
             setAuthMode('pending');
           }
         } else {
-          // Clear everything
+          // No valid session of any kind
           setUser(null);
           setTokens(null);
           setAuthMode('pending');
@@ -149,80 +151,93 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, [hasOfflineData, isOnline]);
 
-  const initializeOfflineAuth = async () => {
+  /**
+   * Restores a prior session at app launch (before Supabase listener fires).
+   * Priority: Online cached session > Guest session > nothing
+   */
+  const initializeAuth = async () => {
     try {
       const storedToken = await getStoredToken();
 
-      if (storedToken) {
-        if (storedToken.type === 'pseudo') {
-          // Offline mode - restore pseudo-token user
-          const storedUser = await AsyncStorage.getItem('offline_user');
-          if (storedUser) {
-            const userData = JSON.parse(storedUser);
-            setUser(userData);
-            setAuthMode('offline');
-            setHasOfflineData(true);
-          }
-        } else if (storedToken.type === 'real' && !isOnline) {
-          // Offline mode with a real token
-          const storedUser = await AsyncStorage.getItem('online_user');
-          if (storedUser) {
-            const userData = JSON.parse(storedUser);
-            setUser(userData);
-            setAuthMode('offline');
-          }
+      if (!storedToken) {
+        // No session ever stored — show login screen
+        return;
+      }
+
+      if (storedToken.type === 'real' && !isOnline) {
+        // Had a real login, now offline — restore from cache
+        const storedUser = await AsyncStorage.getItem('online_user');
+        if (storedUser) {
+          setUser(JSON.parse(storedUser));
+          setAuthMode('offline');
+        }
+      } else if (storedToken.type === 'guest') {
+        // Restore a guest session
+        const guestUser = await AsyncStorage.getItem(GUEST_USER_KEY);
+        if (guestUser) {
+          setUser(JSON.parse(guestUser));
+          setAuthMode('guest');
+          setHasOfflineData(true);
         }
       }
+      // If it's a 'real' token and we ARE online, Supabase listener handles it
     } catch (error) {
-      console.error('Error initializing offline auth:', error);
+      console.error('Error initializing auth:', error);
     }
   };
 
-  const signInOffline = async (userData: { email: string; full_name?: string; username?: string }) => {
+  /**
+   * NEW: Creates (or restores) a local Guest profile.
+   * Does NOT require any credentials. Clearly a guest, not a real account.
+   */
+  const continueAsGuest = async () => {
     try {
       setIsLoading(true);
 
-      // Check if user already exists in SQLite
-      const existingUser = getUserByEmail(userData.email);
-      let userId: number;
+      // Check if a guest user already exists in SQLite
+      let guestSQLiteUser = getUserByEmail(GUEST_USER_EMAIL);
+      let guestUserId: number;
 
-      if (existingUser) {
-        userId = existingUser.user_id!;
+      if (guestSQLiteUser) {
+        guestUserId = guestSQLiteUser.user_id!;
       } else {
-        // Create user in database for offline mode
-        const userToCreate = {
+        // First time: create the guest profile
+        guestUserId = await createUser({
           firebase_uid: undefined,
-          full_name: userData.full_name || '',
-          email: userData.email,
-          username: userData.username || '',
-          role: 'user',
+          full_name: 'Guest',
+          email: GUEST_USER_EMAIL,
+          username: 'guest',
+          role: 'guest',
           password_hash: undefined,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
-        };
-        userId = await createUser(userToCreate);
+        });
       }
 
-      // Create pseudo-token data
-      const pseudoTokenData = createPseudoTokenData(userData);
-
-      // Create offline user object with autoincremented user_id
-      const offlineUser = {
-        ...userData,
-        pseudoToken: pseudoTokenData.token,
-        user_id: userId,
+      const guestUserObj = {
+        user_id: guestUserId,
+        email: GUEST_USER_EMAIL,
+        full_name: 'Guest',
+        username: 'guest',
+        role: 'guest',
+        isGuest: true,
       };
 
-      // Store offline user data
-      await AsyncStorage.setItem('offline_user', JSON.stringify(offlineUser));
-      await storeToken(pseudoTokenData);
+      // Use a special 'guest' token type so we can identify and restore it
+      const guestTokenData = {
+        ...createPseudoTokenData({ email: GUEST_USER_EMAIL, full_name: 'Guest' }),
+        type: 'guest' as const,
+      };
 
-      setUser(offlineUser);
-      setAuthMode('offline');
+      await AsyncStorage.setItem(GUEST_USER_KEY, JSON.stringify(guestUserObj));
+      await storeToken(guestTokenData);
+
+      setUser(guestUserObj);
+      setAuthMode('guest');
       setHasOfflineData(true);
 
     } catch (error) {
-      console.error('Error signing in offline:', error);
+      console.error('Error creating guest session:', error);
       throw error;
     } finally {
       setIsLoading(false);
@@ -230,8 +245,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const signInOnline = async (user: User, tokens: Tokens) => {
-    // Rely on Supabase session listener to automatically pick up the login!
-    // But we still persist it locally
     try {
       setIsLoading(true);
       await AsyncStorage.setItem('online_user', JSON.stringify(user));
@@ -245,32 +258,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  /**
+   * signIn: Called after a successful online Supabase login.
+   * For offline-only sessions, use `continueAsGuest()` instead.
+   */
   const signIn = async (user: User, tokens?: Tokens) => {
-    const hasRealToken = tokens?.accessToken && tokens.accessToken.length > 64; // Pseudo tokens are 64 chars
-
-    if (hasRealToken) {
+    if (tokens?.accessToken) {
       await signInOnline(user, tokens);
-    } else {
-      await signInOffline({
-        email: typeof user === 'object' && user?.email ? user.email : '',
-        full_name: typeof user === 'object' && user?.full_name ? user.full_name : undefined,
-        username: typeof user === 'object' && user?.username ? user.username : undefined
-      });
     }
+    // If no real tokens, do nothing — callers should use continueAsGuest()
   };
 
   const signOut = async () => {
     try {
       setIsLoading(true);
 
-      // 1. Sign out of Supabase Auth
       if (authMode === 'online') {
         await supabase.auth.signOut();
       }
 
-      // 2. Clear all local session storage
+      // Clear all local session data
       await removeStoredToken();
-      await AsyncStorage.multiRemove(['offline_user', 'online_user']);
+      await AsyncStorage.multiRemove(['offline_user', 'online_user', GUEST_USER_KEY]);
 
       setUser(null);
       setTokens(null);
@@ -312,9 +321,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     tokens,
     authMode,
     isOnline,
+    isGuest,
     signIn,
-    signInOffline,
     signInOnline,
+    continueAsGuest,
     signOut,
     refreshToken,
     isLoading,
@@ -334,4 +344,3 @@ export const useAuth = () => {
   if (!ctx) throw new Error('useAuth must be used within AuthProvider');
   return ctx;
 };
-

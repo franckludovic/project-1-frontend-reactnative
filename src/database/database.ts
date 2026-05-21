@@ -55,6 +55,7 @@ export const initDb = () => {
       description TEXT,
       latitude REAL NOT NULL,
       longitude REAL NOT NULL,
+      visibility TEXT DEFAULT 'public',
       synched INTEGER DEFAULT 0,
       created_at TEXT DEFAULT (datetime('now')),
       updated_at TEXT,
@@ -63,6 +64,18 @@ export const initDb = () => {
     );
   `);
 
+  // Migration: add visibility column if missing
+  try {
+    const placeInfo = db.getAllSync("PRAGMA table_info(places)");
+    const hasVisibility = placeInfo.some((col: any) => col.name === 'visibility');
+    if (!hasVisibility) {
+      db.execSync("ALTER TABLE places ADD COLUMN visibility TEXT DEFAULT 'public';");
+      console.log('Added visibility column to places table');
+    }
+  } catch (e) {
+    console.log('Visibility migration skipped:', e);
+  }
+
   // Place Photos
   db.execSync(`
     CREATE TABLE IF NOT EXISTS place_photos (
@@ -70,6 +83,21 @@ export const initDb = () => {
       place_id INTEGER NOT NULL,
       photo_url TEXT,
       local_path TEXT,
+      display_order INTEGER DEFAULT 0,
+      synched INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY(place_id) REFERENCES places(place_id) ON DELETE CASCADE ON UPDATE CASCADE
+    );
+  `);
+
+  // Place Videos
+  db.execSync(`
+    CREATE TABLE IF NOT EXISTS place_videos (
+      video_id INTEGER PRIMARY KEY AUTOINCREMENT,
+      place_id INTEGER NOT NULL,
+      video_url TEXT NOT NULL,
+      thumbnail_url TEXT,
+      duration INTEGER DEFAULT 0,
       display_order INTEGER DEFAULT 0,
       synched INTEGER DEFAULT 0,
       created_at TEXT DEFAULT (datetime('now')),

@@ -102,13 +102,16 @@ useEffect(() => {
     }
 
     try {
-      let placeData;
-      if (authMode === 'offline') {
-        // Use local service for offline mode
-        placeData = await getPlaceById(parseInt(placeId));
-      } else {
-        // Use API service for online mode
-        placeData = await getPlaceByIdApi(parseInt(placeId), tokens?.accessToken || '');
+      // Offline-first: Always try to load from local SQLite first
+      placeData = await getPlaceById(parseInt(placeId));
+
+      // Fallback to API if not found locally and user is online
+      if (!placeData && authMode === 'online') {
+        try {
+          placeData = await getPlaceByIdApi(parseInt(placeId), tokens?.accessToken || '');
+        } catch (apiErr) {
+          console.log("Place not found online either:", apiErr);
+        }
       }
 
       // Place data from local DB doesn't have image_url anymore, images are in place_photos table
@@ -145,13 +148,15 @@ useEffect(() => {
     console.log('Fetching notes for place_id:', placeIdToUse, 'type:', typeof placeIdToUse);
 
     try {
-      let notesData;
-      if (authMode === 'offline') {
-        // Use local service for offline mode
-        notesData = await getNotesByPlaceId(placeIdToUse);
-      } else {
-        // Use API service for online mode
-        notesData = await getNotesByPlaceIdApi(placeIdToUse, tokens?.accessToken as string);
+      // Offline-first: Always try to load notes locally first
+      let notesData = await getNotesByPlaceId(placeIdToUse);
+
+      if ((!notesData || notesData.length === 0) && authMode === 'online') {
+        try {
+          notesData = await getNotesByPlaceIdApi(placeIdToUse, tokens?.accessToken || '');
+        } catch (apiErr) {
+          console.log("Notes not found online either:", apiErr);
+        }
       }
       setNotes(notesData as Note[]);
     } catch (error) {

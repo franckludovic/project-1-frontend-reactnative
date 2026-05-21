@@ -254,6 +254,7 @@ export default function NearbyAttractionsCarousel() {
   const currentOffset = useRef(0);
   const activeAnim = useRef<Animated.CompositeAnimation | null>(null);
   const isProgrammaticScroll = useRef(false);
+  const scrollX = useRef(new Animated.Value(0)).current;
 
   const ITEM_SIZE = CARD_WIDTH + CARD_GAP;
 
@@ -337,7 +338,13 @@ export default function NearbyAttractionsCarousel() {
         snapToAlignment="start"
         contentContainerStyle={styles.listContent}
         clipToPadding={false}
-        onScroll={onScroll}
+        onScroll={Animated.event(
+          [{ nativeEvent: { contentOffset: { x: scrollX } } }],
+          {
+            useNativeDriver: false,
+            listener: onScroll,
+          }
+        )}
         onScrollBeginDrag={onScrollBeginDrag}
         scrollEventThrottle={16}
         getItemLayout={(_, index) => ({
@@ -345,13 +352,35 @@ export default function NearbyAttractionsCarousel() {
           offset: ITEM_SIZE * index,
           index,
         })}
-        renderItem={({ item }) => (
-          <AttractionCard
-            item={item}
-            isSaved={!!savedMap[item.id]}
-            onToggleSave={() => toggleSave(item.id)}
-          />
-        )}
+        renderItem={({ item, index }) => {
+          const inputRange = [
+            (index - 1) * ITEM_SIZE,
+            index * ITEM_SIZE,
+            (index + 1) * ITEM_SIZE,
+          ];
+
+          const scale = scrollX.interpolate({
+            inputRange,
+            outputRange: [0.93, 1.0, 0.93],
+            extrapolate: "clamp",
+          });
+
+          const opacity = scrollX.interpolate({
+            inputRange,
+            outputRange: [0.88, 1.0, 0.88],
+            extrapolate: "clamp",
+          });
+
+          return (
+            <Animated.View style={{ transform: [{ scale }], opacity }}>
+              <AttractionCard
+                item={item}
+                isSaved={!!savedMap[item.id]}
+                onToggleSave={() => toggleSave(item.id)}
+              />
+            </Animated.View>
+          );
+        }}
       />
 
       <Indicator count={attractionsData.length} activeIndex={currentIndex} />
